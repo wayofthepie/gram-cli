@@ -14,6 +14,16 @@ jobs:
           override: "true"
       - name: checkout code
         uses: actions/checkout@v1
+      - name: cache cargo registry
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: cache cargo index
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
       - name: cache target
         uses: actions/cache@v1
         with:
