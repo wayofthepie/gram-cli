@@ -97,3 +97,21 @@ fn diff(repo: Repository, settings: Settings) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(test)]
+mod test {
+    use super::{diff, Repository, Settings};
+
+    #[test]
+    fn should_error_if_diff_shows_differences() {
+        // arrange
+        let repo = Repository {
+            description: Some("test".to_owned()),
+        };
+        let settings = Settings {
+            description: Some("test2".to_owned()),
+        };
+
+        // act / assert
+        assert!(diff(repo, settings).is_err());
+    }
+}
