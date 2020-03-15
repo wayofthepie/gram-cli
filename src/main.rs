@@ -102,7 +102,34 @@ mod test {
     use super::{diff, Repository, Settings};
 
     #[test]
-    fn should_error_if_diff_shows_differences() {
+    fn diff_should_give_error_message_if_there_are_differences() {
+        // arrange
+        let repo_description = "test";
+        let settings_description = "test2";
+        let expected = format!(
+            "Current description [{}] does not match expected description [{}]",
+            repo_description, settings_description
+        );
+        let repo = Repository {
+            description: Some(repo_description.to_owned()),
+        };
+        let settings = Settings {
+            description: Some(settings_description.to_owned()),
+        };
+
+        // act
+        let output = diff(repo, settings);
+        assert!(output.is_err(), "expected an error but did not receive one");
+        let actual = format!("{}", output.err().unwrap());
+        assert_eq!(
+            expected, actual,
+            "expected [{}] to match [{}]",
+            expected, actual
+        );
+    }
+
+    #[test]
+    fn diff_should_error_if_shows_differences() {
         // arrange
         let repo = Repository {
             description: Some("test".to_owned()),
