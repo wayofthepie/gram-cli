@@ -15,23 +15,27 @@ This is a toml file. For example:
 description = "This is a test repository"
 
 [settings]
-merge.allow-squash = false
+merge.allow-squash = false 
 -----------------------------------------
 "#
 );
 
 #[derive(Debug, StructOpt)]
-struct GramOpt {
-    /// The owner of the repository
-    #[structopt(short, long)]
-    owner: String,
+enum GramOpt {
+    /// Diff actual settings with expected settings
+    /// defined in a settings.toml
+    DiffSettings {
+        /// The owner of the repository
+        #[structopt(short, long)]
+        owner: String,
 
-    /// The name of the repository
-    #[structopt(short, long)]
-    repo: String,
+        /// The name of the repository
+        #[structopt(short, long)]
+        repo: String,
 
-    #[structopt(short, long, help = SETTINGS_HELP)]
-    settings: PathBuf,
+        #[structopt(short, long, help = SETTINGS_HELP)]
+        settings: PathBuf,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,9 +51,17 @@ struct Settings {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let opt = GramOpt::from_args();
-    let settings = read_settings(&opt.settings)?;
-    let repo = Github::new().repository(&opt.owner, &opt.repo).await?;
-    diff(repo, settings)?;
+    match opt {
+        GramOpt::DiffSettings {
+            owner,
+            repo,
+            settings,
+        } => {
+            let settings = read_settings(&settings)?;
+            let repo = Github::new().repository(&owner, &repo).await?;
+            diff(repo, settings)?;
+        }
+    }
     Ok(())
 }
 

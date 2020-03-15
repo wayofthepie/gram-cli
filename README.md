@@ -1,13 +1,19 @@
 # Github Repo Automater
 `gram` is a cli to help automate common repository tasks.
 
-## Usage
-```
-$ gram -h
-gram 0.1.0
+# Usage
+
+## Diff settings
+`gram` supports diffing current repository settings with expected settings 
+defined in a toml file. 
+
+``` 
+$ gram diff-settings -h
+gram-diff-settings 0.1.0
+Diff actual settings with expected settings defined in a settings.toml.
 
 USAGE:
-    gram --owner <owner> --repo <repo> --settings <settings>
+    gram diff-settings --owner <owner> --repo <repo> --settings <settings>
 
 FLAGS:
     -h, --help       Prints help information
@@ -23,6 +29,7 @@ OPTIONS:
                                  description = "This is a test repository"
 
                                  [settings]
-                                 merge.allow-squash = false
+                                 merge.allow-squash = false 
                                  -----------------------------------------
+
 ```
