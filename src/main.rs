@@ -88,7 +88,7 @@ impl Github {
 fn diff(repo: Repository, settings: Settings) -> Result<(), Box<dyn Error>> {
     if repo.description != settings.description {
         return Err(format!(
-            "Current description {:?} does not match expected description {:?}",
+            "Current description [{}] does not match expected description [{}]",
             repo.description.unwrap_or_else(|| "null".to_owned()),
             settings.description.unwrap_or_else(|| "null".to_owned())
         )
