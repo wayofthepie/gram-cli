@@ -1,0 +1,39 @@
+name: branch checks
+on: push
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: install system packages
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: install musl toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-unknown-linux-musl
+          override: "true"
+      - name: checkout code
+        uses: actions/checkout@v1
+      - name: cache target
+        uses: actions/cache@v1
+        with:
+          path: target
+          key: ${{ runner.OS }}-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.OS }}-build-${{ hashFiles('**/Cargo.lock') }}
+      - name: build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --target x86_64-unknown-linux-musl --all-features
+      - name: test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --target x86_64-unknown-linux-musl --all-features
+      - name: clippy lint
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
+
