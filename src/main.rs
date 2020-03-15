@@ -4,6 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
+static GRAM_USER_AGENT: &str = "gram";
+static GITHUB_BASE_URL: &str = "https://api.github.com";
 static SETTINGS_HELP: &str = concat!(
     "Path to the settings file",
     r#"
@@ -46,7 +48,7 @@ struct Settings {
 async fn main() -> Result<(), Box<dyn Error>> {
     let opt = GramOpt::from_args();
     let settings = read_settings(&opt.settings)?;
-    let repo = get_repo(&opt.owner, &opt.repo).await?;
+    let repo = Github::new().repository(&opt.owner, &opt.repo).await?;
     diff(repo, settings)?;
     Ok(())
 }
@@ -57,18 +59,30 @@ fn read_settings(settings_location: &PathBuf) -> Result<Settings, Box<dyn Error>
     Ok(settings)
 }
 
-async fn get_repo(owner: &str, repo: &str) -> Result<Repository, Box<dyn Error>> {
-    let client = reqwest::Client::builder()
-        .user_agent("github-repo-automater")
-        .build()
-        .unwrap();
-    let body = client
-        .get(&format!("https://api.github.com/repos/{}/{}", owner, repo))
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .send()
-        .await;
-    let state = body.unwrap().json::<Repository>().await.unwrap();
-    Ok(state)
+struct Github {
+    client: reqwest::Client,
+}
+
+impl Github {
+    fn new() -> Self {
+        let client = reqwest::Client::builder()
+            .user_agent(GRAM_USER_AGENT)
+            .build()
+            .unwrap();
+        Self { client }
+    }
+
+    async fn repository(&self, owner: &str, repo: &str) -> Result<Repository, Box<dyn Error>> {
+        let repository = self
+            .client
+            .get(&format!("{}/repos/{}/{}", GITHUB_BASE_URL, owner, repo))
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .send()
+            .await?
+            .json::<Repository>()
+            .await?;
+        Ok(repository)
+    }
 }
 
 fn diff(repo: Repository, settings: Settings) -> Result<(), Box<dyn Error>> {
@@ -82,3 +96,4 @@ fn diff(repo: Repository, settings: Settings) -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
+
