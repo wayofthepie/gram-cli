@@ -28,7 +28,10 @@ pub struct Settings {
 #[derive(Debug, StructOpt)]
 pub enum GramOpt {
     /// Diff actual settings with expected settings
-    /// defined in a settings.toml
+    /// defined in a settings toml file.
+    ///
+    /// gram will only diff settings defined in the given toml file. It
+    /// will not mention any settings which are not defined in that file.
     DiffSettings {
         /// The owner of the repository
         #[structopt(short, long)]
@@ -161,4 +164,3 @@ mod diff {
         );
     }
 }
-
