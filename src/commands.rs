@@ -24,9 +24,23 @@ pub struct Settings {
     description: Option<String>,
 }
 
+#[derive(Debug, StructOpt)]
+pub struct GramOpt {
+    /// Github token to use.
+    ///
+    /// This is a Personal Access token that gram can use to authenticate with
+    /// github. It can also be set as an environment variable called GITHUB_TOKEN.
+    #[structopt(long, short, env = "GITHUB_TOKEN")]
+    token: String,
+
+    /// Subcommands
+    #[structopt(subcommand)]
+    command: GramOptCommand,
+}
+
 /// Commands supported by `gram`.
 #[derive(Debug, StructOpt)]
-pub enum GramOpt {
+pub enum GramOptCommand {
     /// Diff actual settings with expected settings
     /// defined in a settings toml file.
     ///
@@ -52,8 +66,8 @@ impl GramOpt {
         G: GithubClient,
         F: FileReader,
     {
-        match self {
-            GramOpt::DiffSettings {
+        match self.command {
+            GramOptCommand::DiffSettings {
                 owner,
                 repo,
                 settings,
@@ -104,8 +118,8 @@ impl FileReader for SettingsReader {
 }
 
 #[cfg(test)]
-mod diff {
-    use super::{FileReader, GramOpt, Repository};
+mod test {
+    use super::{FileReader, GramOpt, GramOptCommand, Repository};
     use crate::github::GithubClient;
     use async_trait::async_trait;
     use std::clone::Clone;
@@ -137,7 +151,7 @@ mod diff {
     }
 
     #[tokio::test]
-    async fn it_should_error_if_settings_and_repo_have_different_description() {
+    async fn handle_it_should_error_if_settings_and_repo_have_different_description() {
         // arrange
         let github = FakeGithubRepo {
             description: Some("something".to_owned()),
@@ -145,10 +159,14 @@ mod diff {
         let settings = FakeFileReader {
             file_as_str: r#"description = "test""#.to_owned(),
         };
-        let opt = GramOpt::DiffSettings {
+        let command = GramOptCommand::DiffSettings {
             owner: "wayofthepie".to_owned(),
             repo: "gram".to_owned(),
             settings: PathBuf::new(),
+        };
+        let opt = GramOpt {
+            token: "".to_owned(),
+            command,
         };
 
         // act
