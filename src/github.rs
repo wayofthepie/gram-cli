@@ -21,19 +21,18 @@ pub trait GithubClient {
     async fn repository(&self, owner: &str, repo: &str) -> Result<Repository, Box<dyn Error>>;
 }
 
-pub struct Github<'a> {
-    token: &'a str,
+pub struct Github {
     client: Client,
 }
 
-impl<'a> Github<'a> {
-    pub fn new(token: &'a str) -> Self {
+impl Github {
+    pub fn new(token: &str) -> Self {
         let client = Client::builder()
             .user_agent(GRAM_USER_AGENT)
             .default_headers(Github::default_headers(token))
             .build()
             .unwrap();
-        Self { token, client }
+        Self { client }
     }
 
     fn default_headers(token: &str) -> HeaderMap {
@@ -52,7 +51,7 @@ impl<'a> Github<'a> {
 }
 
 #[async_trait]
-impl<'a> GithubClient for Github<'a> {
+impl GithubClient for Github {
     async fn repository(&self, owner: &str, repo: &str) -> Result<Repository, Box<dyn Error>> {
         let repository = self
             .client

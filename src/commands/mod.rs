@@ -171,8 +171,6 @@ impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
 impl GramSettings {
     /// Get the diff between two [GramSettings](commands.struct.GramSettings.html).
     fn diff(&self, other: &GramSettings) -> Vec<String> {
-        println!("LHS {:#?}", self);
-        println!("RHS {:#?}", other);
         let hm = HashMap::from(self);
         let other_hm = HashMap::from(other);
         hm.iter()
