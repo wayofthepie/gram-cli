@@ -61,7 +61,14 @@ impl GramSettings {
         let other_hm = HashMap::from(other);
         hm.iter()
             .map(|(key, expected_val)| {
-                other_hm.get(key).and_then(|other_val| {
+                let other_val = other_hm.get(key);
+                if other_val == None {
+                    return Some(format!(
+                        "For setting [{}]: expected [{}] but it has no value",
+                        key, expected_val
+                    ));
+                }
+                other_val.and_then(|other_val| {
                     if expected_val != other_val {
                         Some(format!(
                             "For setting [{}]: expected [{}] got [{}]",
@@ -197,6 +204,7 @@ mod test {
         }
     }
 
+    #[derive(Default)]
     struct FakeGithubRepo {
         description: Option<String>,
     }
@@ -229,13 +237,14 @@ mod test {
     }
 
     #[tokio::test]
-    async fn handle_it_should_error_if_settings_and_repo_have_different_description() {
+    async fn handle_it_should_error_if_settings_toml_has_a_value_but_the_repo_does_not() {
         // arrange
-        let github = FakeGithubRepo {
-            description: Some("something".to_owned()),
-        };
+        let github = FakeGithubRepo::default();
         let settings = FakeFileReader {
-            file_as_str: r#"description = "test""#.to_owned(),
+            file_as_str: r#"
+                description = "test"
+            "#
+            .to_owned(),
         };
         let command = GramOptCommand::DiffSettings {
             owner: "wayofthepie".to_owned(),
@@ -256,7 +265,41 @@ mod test {
         assert!(err.is_some());
         assert_eq!(
             format!("{}", err.unwrap()),
-            "For setting [description]: expected [test] got [something]"
+            "For setting [description]: expected [test] but it has no value"
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_it_should_error_if_settings_and_repo_have_different_description() {
+        // arrange
+        let mut github = FakeGithubRepo::default();
+        github.description = Some("something else".to_owned());
+        let settings = FakeFileReader {
+            file_as_str: r#"
+                description = "test"
+            "#
+            .to_owned(),
+        };
+        let command = GramOptCommand::DiffSettings {
+            owner: "wayofthepie".to_owned(),
+            repo: "gram".to_owned(),
+            settings: PathBuf::new(),
+        };
+        let opt = GramOpt {
+            token: "".to_owned(),
+            command,
+        };
+
+        // act
+        let result = opt.handle(github, settings).await;
+
+        // arrange
+        assert!(result.is_err(), "expected an error");
+        let err = result.err();
+        assert!(err.is_some());
+        assert_eq!(
+            format!("{}", err.unwrap()),
+            "For setting [description]: expected [test] got [something else]"
         );
     }
 }

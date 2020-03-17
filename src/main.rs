@@ -5,7 +5,6 @@ use github::Github;
 use std::error::Error;
 use structopt::StructOpt;
 
-//
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let github = Github::new();
