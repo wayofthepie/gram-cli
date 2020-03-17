@@ -1,4 +1,6 @@
-use crate::github::{GithubClient, Repository};
+mod diff;
+use crate::github::GithubClient;
+use diff::diff;
 use serde::Deserialize;
 use std::error::Error;
 use std::fs;
@@ -20,7 +22,7 @@ merge.allow-squash = false
 );
 
 #[derive(Debug, Deserialize)]
-pub struct Settings {
+pub struct GramSettings {
     description: Option<String>,
 }
 
@@ -81,24 +83,12 @@ impl GramOpt {
     }
 }
 
-fn diff(repo: Repository, settings: Settings) -> Result<(), Box<dyn Error>> {
-    if repo.description != settings.description {
-        return Err(format!(
-            "Current description [{}] does not match expected description [{}]",
-            repo.description.unwrap_or_else(|| "null".to_owned()),
-            settings.description.unwrap_or_else(|| "null".to_owned())
-        )
-        .into());
-    }
-    Ok(())
-}
-
 pub trait FileReader {
     fn read_to_string<P: AsRef<Path>>(&self, path: P) -> Result<String, std::io::Error>;
 
-    fn read_settings(&self, settings_location: &PathBuf) -> Result<Settings, Box<dyn Error>> {
+    fn read_settings(&self, settings_location: &PathBuf) -> Result<GramSettings, Box<dyn Error>> {
         let settings_str = self.read_to_string(settings_location)?;
-        let settings = toml::from_str::<Settings>(&settings_str)?;
+        let settings = toml::from_str::<GramSettings>(&settings_str)?;
         Ok(settings)
     }
 }
@@ -119,8 +109,8 @@ impl FileReader for SettingsReader {
 
 #[cfg(test)]
 mod test {
-    use super::{FileReader, GramOpt, GramOptCommand, Repository};
-    use crate::github::GithubClient;
+    use super::{FileReader, GramOpt, GramOptCommand};
+    use crate::github::{GithubClient, Repository};
     use async_trait::async_trait;
     use std::clone::Clone;
     use std::error::Error;
