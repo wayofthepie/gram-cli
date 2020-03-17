@@ -243,6 +243,7 @@ mod test {
     use std::path::{Path, PathBuf};
     use tokio;
 
+    #[derive(Default)]
     struct FakeFileReader {
         file_as_str: String,
     }
@@ -321,26 +322,25 @@ mod test {
         let result = opt.handle_internal(github, settings).await;
 
         // arrange
-        assert!(result.is_err(), "expected an error");
-        let err = result.err();
-        assert!(err.is_some());
-        assert_eq!(
-            format!("{}", err.unwrap()),
-            "Actual settings differ from expected!\n[description]: expected [test] but it has no value\n"
+        assert_diff_error(
+            result,
+            vec![
+                "Actual settings differ from expected!",
+                "[description]: expected [test] but it has no value",
+            ],
         );
     }
 
     #[tokio::test]
-    async fn handle_it_should_error_if_settings_and_repo_have_different_description() {
+    async fn handle_it_should_error_if_settings_toml_and_repo_have_different_description() {
         // arrange
         let mut github = FakeGithubRepo::default();
         github.description = Some("something else".to_owned());
-        let settings = FakeFileReader {
-            file_as_str: r#"
+        let mut reader = FakeFileReader::default();
+        reader.file_as_str = r#"
                 description = "test"
             "#
-            .to_owned(),
-        };
+        .to_owned();
         let command = GramOptCommand::DiffSettings {
             owner: "wayofthepie".to_owned(),
             repo: "gram".to_owned(),
@@ -352,25 +352,46 @@ mod test {
         };
 
         // act
-        let result = opt.handle_internal(github, settings).await;
+        let result = opt.handle_internal(github, reader).await;
 
         // arrange
+        assert_diff_error(
+            result,
+            vec![
+                "Actual settings differ from expected!",
+                "[description]: expected [test] got [something else]",
+            ],
+        );
+    }
+
+    fn assert_diff_error(result: Result<()>, expected_lines: Vec<&str>) {
         assert!(result.is_err(), "expected an error, got {:#?}", result);
 
         let err = result.err();
         assert!(err.is_some(), "expected error to have an 'err' value");
 
+
         let err_str = format!("{}", err.unwrap());
-        let lines = err_str.split('\n').collect::<Vec<&str>>();
-        assert_eq!(
-            lines[0], "Actual settings differ from expected!",
-            "first line has unexpected value, got: {}",
-            lines[0]
+        let lines = err_str.trim().split('\n').collect::<Vec<&str>>();
+
+        assert!(
+            lines.len() == expected_lines.len(),
+            concat!(
+                "the number of lines in the error does not match expected",
+                ", got:\n{:#?}\nexpected\n{:#?}\n",
+            ),
+            lines,
+            expected_lines
         );
-        assert_eq!(
-            lines[1], "[description]: expected [test] got [something else]",
-            "second line in error has unexpected value, got: {}",
-            lines[1]
-        );
+        expected_lines
+            .iter()
+            .enumerate()
+            .for_each(|(index, &expected)| {
+                assert_eq!(
+                    lines[index], expected,
+                    "line {} has unexpected value",
+                    index
+                )
+            });
     }
 }
