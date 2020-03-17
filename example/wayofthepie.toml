@@ -1,3 +1,5 @@
 description = "Something"
 
+[options]
+allow-squash-merge = false
 

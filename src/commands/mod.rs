@@ -1,4 +1,4 @@
-use crate::github::{GithubClient, Repository};
+use crate::github::{Github, GithubClient, Repository};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
@@ -19,70 +19,6 @@ merge.allow-squash = false
 -----------------------------------------
 "#
 );
-
-/// Repository settings that `gram` is able to see.
-///
-/// Any settings that are not defined here will be ignored in all
-/// `gram` commands.
-#[derive(Debug, Deserialize)]
-pub struct GramSettings {
-    description: Option<String>,
-}
-
-/// Allowing easy conversion between [Repository](struct.Repository.html)
-/// and [GramSettings](struct.GramSettings.html) simplifies actions like diff.
-impl From<Repository> for GramSettings {
-    fn from(repo: Repository) -> Self {
-        Self {
-            description: repo.description,
-        }
-    }
-}
-
-static DESCRIPTION_KEY: &str = "description";
-
-// TODO: it would be nicer to use a macro/proc-macro to generate this
-// instance. Then the keys can be taken directly from the field names.
-impl<'a> From<&'a GramSettings> for HashMap<&'a str, &'a str> {
-    fn from(settings: &'a GramSettings) -> Self {
-        let GramSettings { description } = settings;
-        let mut hm = Self::new();
-        description
-            .as_ref()
-            .map(|val| hm.insert(DESCRIPTION_KEY, val));
-        hm
-    }
-}
-
-impl GramSettings {
-    /// Get the diff between two [GramSettings](commands.struct.GramSettings.html).
-    fn diff(&self, other: &GramSettings) -> Vec<String> {
-        let hm = HashMap::from(self);
-        let other_hm = HashMap::from(other);
-        hm.iter()
-            .map(|(key, expected_val)| {
-                let other_val = other_hm.get(key);
-                if other_val == None {
-                    return Some(format!(
-                        "For setting [{}]: expected [{}] but it has no value",
-                        key, expected_val
-                    ));
-                }
-                other_val.and_then(|other_val| {
-                    if expected_val != other_val {
-                        Some(format!(
-                            "For setting [{}]: expected [{}] got [{}]",
-                            key, expected_val, other_val
-                        ))
-                    } else {
-                        None
-                    }
-                })
-            })
-            .flatten()
-            .collect::<Vec<String>>()
-    }
-}
 
 /// Supported commands and options.
 ///
@@ -131,13 +67,27 @@ pub enum GramOptCommand {
 }
 
 impl GramOpt {
+    /// Handle arguments passed to `gram`.
+    ///
+    /// This is the first place we have access to our arguments so we don't expose
+    /// the github client or settings reader on its contract. The github client may
+    /// be used with a token, and this is the first place we can access that token.
+    /// This does lead to having to test the [handle_internal](struct.GramOpt.html#method.handle_internal)
+    /// function instead, this is ok in this case.
+    pub async fn handle(&self) -> Result<(), Box<dyn Error>> {
+        let token = &self.token;
+        let github = Github::new(token);
+        let reader = SettingsReader::new();
+        self.handle_internal(github, reader).await
+    }
+
     /// Handle the command and args given to `gram`.
-    pub async fn handle<G, F>(self, github: G, reader: F) -> Result<(), Box<dyn Error>>
+    async fn handle_internal<G, F>(&self, github: G, reader: F) -> Result<(), Box<dyn Error>>
     where
         G: GithubClient,
         F: FileReader,
     {
-        match self.command {
+        match &self.command {
             GramOptCommand::DiffSettings {
                 owner,
                 repo,
@@ -159,6 +109,96 @@ impl GramOpt {
     }
 }
 
+/// Repository settings that `gram` is able to see.
+///
+/// Any settings that are not defined here will be ignored in all
+/// `gram` commands.
+#[derive(Debug, Deserialize)]
+pub struct GramSettings {
+    description: Option<String>,
+    options: Option<Options>,
+}
+
+/// Represents settings that appear under a repositories Settings -> Options section.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct Options {
+    #[serde(rename = "allow-squash-merge")]
+    allow_squash_merge: Option<bool>,
+}
+
+impl Copy for Options {}
+
+/// Allowing easy conversion between [Repository](struct.Repository.html)
+/// and [GramSettings](struct.GramSettings.html) simplifies actions like diff.
+impl From<Repository> for GramSettings {
+    fn from(repo: Repository) -> Self {
+        let mut has_option = false;
+        let mut options: Options = Options::default();
+        if let Some(_) = repo.allow_squash_merge {
+            has_option = true;
+            options.allow_squash_merge = repo.allow_squash_merge;
+        }
+        Self {
+            description: repo.description,
+            options: if has_option { Some(options) } else { None },
+        }
+    }
+}
+
+static DESCRIPTION_KEY: &str = "description";
+static OPTIONS_ALLOW_SQUASH_KEY: &str = "options.allow-squash-merge";
+
+// TODO: it would be nicer to use a macro/proc-macro to generate this
+// instance. Then the keys can be taken directly from the field names.
+impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
+    fn from(settings: &'a GramSettings) -> Self {
+        let GramSettings {
+            description,
+            options,
+        } = settings;
+        let mut hm = Self::new();
+        description
+            .as_ref()
+            .map(|val| hm.insert(DESCRIPTION_KEY, val.to_owned()));
+        options.as_ref().map(|opts| {
+            opts.allow_squash_merge
+                .map(|allow| hm.insert(OPTIONS_ALLOW_SQUASH_KEY, allow.to_string()))
+        });
+        hm
+    }
+}
+
+impl GramSettings {
+    /// Get the diff between two [GramSettings](commands.struct.GramSettings.html).
+    fn diff(&self, other: &GramSettings) -> Vec<String> {
+        println!("LHS {:#?}", self);
+        println!("RHS {:#?}", other);
+        let hm = HashMap::from(self);
+        let other_hm = HashMap::from(other);
+        hm.iter()
+            .map(|(key, expected_val)| {
+                let other_val = other_hm.get(key);
+                if other_val == None {
+                    return Some(format!(
+                        "For setting [{}]: expected [{}] but it has no value",
+                        key, expected_val
+                    ));
+                }
+                other_val.and_then(|other_val| {
+                    if expected_val != other_val {
+                        Some(format!(
+                            "For setting [{}]: expected [{}] got [{}]",
+                            key, expected_val, other_val
+                        ))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .flatten()
+            .collect::<Vec<String>>()
+    }
+}
 pub trait FileReader {
     fn read_to_string<P: AsRef<Path>>(&self, path: P) -> Result<String, std::io::Error>;
 
@@ -185,7 +225,10 @@ impl FileReader for SettingsReader {
 
 #[cfg(test)]
 mod test {
-    use super::{FileReader, GramOpt, GramOptCommand, GramSettings};
+    use super::{
+        FileReader, GramOpt, GramOptCommand, GramSettings, Options, DESCRIPTION_KEY,
+        OPTIONS_ALLOW_SQUASH_KEY,
+    };
     use crate::github::{GithubClient, Repository};
     use async_trait::async_trait;
     use std::clone::Clone;
@@ -214,6 +257,7 @@ mod test {
         async fn repository(&self, _: &str, _: &str) -> Result<Repository, Box<dyn Error>> {
             Ok(Repository {
                 description: self.description.to_owned(),
+                allow_squash_merge: None,
             })
         }
     }
@@ -223,17 +267,28 @@ mod test {
         // arrange
         let settings = GramSettings {
             description: Some("description".to_owned()),
+            options: Some(Options {
+                allow_squash_merge: Some(true),
+            }),
         };
         // Destructure so the compiler will give out if there are unused fields on
         // the left hand side. Prevents mistakes where the value is added to `settings`
         // in the definition above, but never used after that.
-        let GramSettings { description } = &settings;
+        let GramSettings {
+            description,
+            options,
+        } = &settings;
+        let Options { allow_squash_merge } = options.unwrap();
 
         // act
         let hm = HashMap::from(&settings);
 
         // assert
-        assert_eq!(hm.get("description").map(|s| *s), description.as_deref());
+        assert_eq!(hm.get(DESCRIPTION_KEY).map(|s| s.to_owned()), *description);
+        assert_eq!(
+            hm.get(OPTIONS_ALLOW_SQUASH_KEY).map(|s| s.to_owned()),
+            allow_squash_merge.map(|b| b.to_string())
+        );
     }
 
     #[tokio::test]
@@ -257,7 +312,7 @@ mod test {
         };
 
         // act
-        let result = opt.handle(github, settings).await;
+        let result = opt.handle_internal(github, settings).await;
 
         // arrange
         assert!(result.is_err(), "expected an error");
@@ -291,7 +346,7 @@ mod test {
         };
 
         // act
-        let result = opt.handle(github, settings).await;
+        let result = opt.handle_internal(github, settings).await;
 
         // arrange
         assert!(result.is_err(), "expected an error");

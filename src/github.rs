@@ -1,4 +1,9 @@
 use async_trait::async_trait;
+use reqwest::{
+    header,
+    header::{HeaderMap, HeaderValue},
+    Client,
+};
 use serde::Deserialize;
 use std::error::Error;
 
@@ -8,6 +13,7 @@ static GITHUB_BASE_URL: &str = "https://api.github.com";
 #[derive(Debug, Deserialize)]
 pub struct Repository {
     pub description: Option<String>,
+    pub allow_squash_merge: Option<bool>,
 }
 
 #[async_trait]
@@ -15,22 +21,38 @@ pub trait GithubClient {
     async fn repository(&self, owner: &str, repo: &str) -> Result<Repository, Box<dyn Error>>;
 }
 
-pub struct Github {
-    client: reqwest::Client,
+pub struct Github<'a> {
+    token: &'a str,
+    client: Client,
 }
 
-impl Github {
-    pub fn new() -> Self {
-        let client = reqwest::Client::builder()
+impl<'a> Github<'a> {
+    pub fn new(token: &'a str) -> Self {
+        let client = Client::builder()
             .user_agent(GRAM_USER_AGENT)
+            .default_headers(Github::default_headers(token))
             .build()
             .unwrap();
-        Self { client }
+        Self { token, client }
+    }
+
+    fn default_headers(token: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_bytes(format!("token {}", token).as_bytes())
+                .expect("failed building authorization header from token"),
+        );
+        headers
     }
 }
 
 #[async_trait]
-impl GithubClient for Github {
+impl<'a> GithubClient for Github<'a> {
     async fn repository(&self, owner: &str, repo: &str) -> Result<Repository, Box<dyn Error>> {
         let repository = self
             .client
@@ -43,4 +65,3 @@ impl GithubClient for Github {
         Ok(repository)
     }
 }
-
