@@ -1,10 +1,10 @@
 mod commands;
 pub mod github;
+use anyhow::Result;
 use commands::GramOpt;
-use std::error::Error;
 use structopt::StructOpt;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     GramOpt::from_args().handle().await
 }

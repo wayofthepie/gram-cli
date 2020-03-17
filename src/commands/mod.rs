@@ -1,7 +1,7 @@
 use crate::github::{Github, GithubClient, Repository};
+use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 use structopt::StructOpt;
@@ -74,7 +74,7 @@ impl GramOpt {
     /// be used with a token, and this is the first place we can access that token.
     /// This does lead to having to test the [handle_internal](struct.GramOpt.html#method.handle_internal)
     /// function instead, this is ok in this case.
-    pub async fn handle(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn handle(&self) -> Result<()> {
         let token = &self.token;
         let github = Github::new(token);
         let reader = SettingsReader::new();
@@ -82,7 +82,7 @@ impl GramOpt {
     }
 
     /// Handle the command and args given to `gram`.
-    async fn handle_internal<G, F>(&self, github: G, reader: F) -> Result<(), Box<dyn Error>>
+    async fn handle_internal<G, F>(&self, github: G, reader: F) -> Result<()>
     where
         G: GithubClient,
         F: FileReader,
@@ -100,8 +100,12 @@ impl GramOpt {
                 match diffs.as_slice() {
                     [] => Ok(()),
                     [..] => {
-                        diffs.iter().for_each(|diff| println!("{}", diff));
-                        Err("Actual settings differ from expected! See output above.")?
+                        let errors = diffs.iter().fold(String::new(), |mut acc, diff| {
+                            acc.push_str(diff);
+                            acc.push('\n');
+                            acc
+                        });
+                        Err(anyhow!("Actual settings differ from expected!\n{}", errors))
                     }
                 }
             }
@@ -134,7 +138,7 @@ impl From<Repository> for GramSettings {
     fn from(repo: Repository) -> Self {
         let mut has_option = false;
         let mut options: Options = Options::default();
-        if let Some(_) = repo.allow_squash_merge {
+        if repo.allow_squash_merge.is_some() {
             has_option = true;
             options.allow_squash_merge = repo.allow_squash_merge;
         }
@@ -150,6 +154,9 @@ static OPTIONS_ALLOW_SQUASH_KEY: &str = "options.allow-squash-merge";
 
 // TODO: it would be nicer to use a macro/proc-macro to generate this
 // instance. Then the keys can be taken directly from the field names.
+//
+// Tell clippy to ignore the implicit hasher here. We want to used the default.
+#[allow(clippy::implicit_hasher)]
 impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
     fn from(settings: &'a GramSettings) -> Self {
         let GramSettings {
@@ -178,14 +185,14 @@ impl GramSettings {
                 let other_val = other_hm.get(key);
                 if other_val == None {
                     return Some(format!(
-                        "For setting [{}]: expected [{}] but it has no value",
+                        "[{}]: expected [{}] but it has no value",
                         key, expected_val
                     ));
                 }
                 other_val.and_then(|other_val| {
                     if expected_val != other_val {
                         Some(format!(
-                            "For setting [{}]: expected [{}] got [{}]",
+                            "[{}]: expected [{}] got [{}]",
                             key, expected_val, other_val
                         ))
                     } else {
@@ -197,10 +204,11 @@ impl GramSettings {
             .collect::<Vec<String>>()
     }
 }
+
 pub trait FileReader {
     fn read_to_string<P: AsRef<Path>>(&self, path: P) -> Result<String, std::io::Error>;
 
-    fn read_settings(&self, settings_location: &PathBuf) -> Result<GramSettings, Box<dyn Error>> {
+    fn read_settings(&self, settings_location: &PathBuf) -> Result<GramSettings> {
         let settings_str = self.read_to_string(settings_location)?;
         let settings = toml::from_str::<GramSettings>(&settings_str)?;
         Ok(settings)
@@ -228,10 +236,10 @@ mod test {
         OPTIONS_ALLOW_SQUASH_KEY,
     };
     use crate::github::{GithubClient, Repository};
+    use anyhow::Result;
     use async_trait::async_trait;
     use std::clone::Clone;
     use std::collections::HashMap;
-    use std::error::Error;
     use std::path::{Path, PathBuf};
     use tokio;
 
@@ -252,7 +260,7 @@ mod test {
 
     #[async_trait]
     impl GithubClient for FakeGithubRepo {
-        async fn repository(&self, _: &str, _: &str) -> Result<Repository, Box<dyn Error>> {
+        async fn repository(&self, _: &str, _: &str) -> Result<Repository> {
             Ok(Repository {
                 description: self.description.to_owned(),
                 allow_squash_merge: None,
@@ -318,7 +326,7 @@ mod test {
         assert!(err.is_some());
         assert_eq!(
             format!("{}", err.unwrap()),
-            "For setting [description]: expected [test] but it has no value"
+            "Actual settings differ from expected!\n[description]: expected [test] but it has no value\n"
         );
     }
 
@@ -347,12 +355,22 @@ mod test {
         let result = opt.handle_internal(github, settings).await;
 
         // arrange
-        assert!(result.is_err(), "expected an error");
+        assert!(result.is_err(), "expected an error, got {:#?}", result);
+
         let err = result.err();
-        assert!(err.is_some());
+        assert!(err.is_some(), "expected error to have an 'err' value");
+
+        let err_str = format!("{}", err.unwrap());
+        let lines = err_str.split('\n').collect::<Vec<&str>>();
         assert_eq!(
-            format!("{}", err.unwrap()),
-            "For setting [description]: expected [test] got [something else]"
+            lines[0], "Actual settings differ from expected!",
+            "first line has unexpected value, got: {}",
+            lines[0]
+        );
+        assert_eq!(
+            lines[1], "[description]: expected [test] got [something else]",
+            "second line in error has unexpected value, got: {}",
+            lines[1]
         );
     }
 }

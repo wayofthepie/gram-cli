@@ -1,3 +1,4 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::{
     header,
@@ -5,7 +6,6 @@ use reqwest::{
     Client,
 };
 use serde::Deserialize;
-use std::error::Error;
 
 static GRAM_USER_AGENT: &str = "gram";
 static GITHUB_BASE_URL: &str = "https://api.github.com";
@@ -18,7 +18,7 @@ pub struct Repository {
 
 #[async_trait]
 pub trait GithubClient {
-    async fn repository(&self, owner: &str, repo: &str) -> Result<Repository, Box<dyn Error>>;
+    async fn repository(&self, owner: &str, repo: &str) -> Result<Repository>;
 }
 
 pub struct Github {
@@ -52,7 +52,7 @@ impl Github {
 
 #[async_trait]
 impl GithubClient for Github {
-    async fn repository(&self, owner: &str, repo: &str) -> Result<Repository, Box<dyn Error>> {
+    async fn repository(&self, owner: &str, repo: &str) -> Result<Repository> {
         let repository = self
             .client
             .get(&format!("{}/repos/{}/{}", GITHUB_BASE_URL, owner, repo))
