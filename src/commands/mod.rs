@@ -1,7 +1,6 @@
-mod diff;
-use crate::github::GithubClient;
-use diff::diff;
+use crate::github::{GithubClient, Repository};
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -21,11 +20,72 @@ merge.allow-squash = false
 "#
 );
 
+/// Repository settings that `gram` is able to see.
+///
+/// Any settings that are not defined here will be ignored in all
+/// `gram` commands.
 #[derive(Debug, Deserialize)]
 pub struct GramSettings {
     description: Option<String>,
 }
 
+/// Allowing easy conversion between [Repository](struct.Repository.html)
+/// and [GramSettings](struct.GramSettings.html) simplifies actions like diff.
+impl From<Repository> for GramSettings {
+    fn from(repo: Repository) -> Self {
+        Self {
+            description: repo.description,
+        }
+    }
+}
+
+static DESCRIPTION_KEY: &str = "description";
+
+// TODO: it would be nicer to use a macro/proc-macro to generate this
+// instance. Then the keys can be taken directly from the field names.
+impl<'a> From<&'a GramSettings> for HashMap<&'a str, &'a str> {
+    fn from(settings: &'a GramSettings) -> Self {
+        let GramSettings { description } = settings;
+        let mut hm = Self::new();
+        description
+            .as_ref()
+            .map(|val| hm.insert(DESCRIPTION_KEY, val));
+        hm
+    }
+}
+
+impl GramSettings {
+    /// Get the diff between two [GramSettings](commands.struct.GramSettings.html).
+    fn diff(&self, other: &GramSettings) -> Vec<String> {
+        let hm = HashMap::from(self);
+        let other_hm = HashMap::from(other);
+        hm.iter()
+            .map(|(key, expected_val)| {
+                other_hm.get(key).and_then(|other_val| {
+                    if expected_val != other_val {
+                        Some(format!(
+                            "For setting [{}]: expected [{}] got [{}]",
+                            key, expected_val, other_val
+                        ))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .flatten()
+            .collect::<Vec<String>>()
+    }
+}
+
+/// Supported commands and options.
+///
+/// # Diff settings
+/// `gram` supports diffing known settings defined in a settings toml file
+/// against the current repository settings. e.g.
+///
+/// ```shell
+/// $ gram diff-settings -t ${TOKEN} -o ${OWNER} -r ${REPO} -s ${PATH_TO_TOML}
+/// ```
 #[derive(Debug, StructOpt)]
 pub struct GramOpt {
     /// Github token to use.
@@ -40,7 +100,7 @@ pub struct GramOpt {
     command: GramOptCommand,
 }
 
-/// Commands supported by `gram`.
+/// Supported commands.
 #[derive(Debug, StructOpt)]
 pub enum GramOptCommand {
     /// Diff actual settings with expected settings
@@ -49,20 +109,22 @@ pub enum GramOptCommand {
     /// gram will only diff settings defined in the given toml file. It
     /// will not mention any settings which are not defined in that file.
     DiffSettings {
-        /// The owner of the repository
+        /// The owner of the repository.
         #[structopt(short, long)]
         owner: String,
 
-        /// The name of the repository
+        /// The name of the repository.
         #[structopt(short, long)]
         repo: String,
 
+        /// Path to the settings TOML file.
         #[structopt(short, long, help = SETTINGS_HELP)]
         settings: PathBuf,
     },
 }
 
 impl GramOpt {
+    /// Handle the command and args given to `gram`.
     pub async fn handle<G, F>(self, github: G, reader: F) -> Result<(), Box<dyn Error>>
     where
         G: GithubClient,
@@ -76,10 +138,17 @@ impl GramOpt {
             } => {
                 let settings = reader.read_settings(&settings)?;
                 let repo = github.repository(&owner, &repo).await?;
-                diff(repo, settings)?;
+                let actual_settings = GramSettings::from(repo);
+                let diffs = settings.diff(&actual_settings);
+                match diffs.as_slice() {
+                    [] => Ok(()),
+                    [..] => Err(diffs.iter().fold(String::new(), |mut acc, diff| {
+                        acc.push_str(diff);
+                        acc
+                    }))?,
+                }
             }
         }
-        Ok(())
     }
 }
 
@@ -109,10 +178,11 @@ impl FileReader for SettingsReader {
 
 #[cfg(test)]
 mod test {
-    use super::{FileReader, GramOpt, GramOptCommand};
+    use super::{FileReader, GramOpt, GramOptCommand, GramSettings};
     use crate::github::{GithubClient, Repository};
     use async_trait::async_trait;
     use std::clone::Clone;
+    use std::collections::HashMap;
     use std::error::Error;
     use std::path::{Path, PathBuf};
     use tokio;
@@ -138,6 +208,24 @@ mod test {
                 description: self.description.to_owned(),
             })
         }
+    }
+
+    #[test]
+    fn from_gram_settings_for_hashmap_should_convert_all_fields_with_non_none_values() {
+        // arrange
+        let settings = GramSettings {
+            description: Some("description".to_owned()),
+        };
+        // Destructure so the compiler will give out if there are unused fields on
+        // the left hand side. Prevents mistakes where the value is added to `settings`
+        // in the definition above, but never used after that.
+        let GramSettings { description } = &settings;
+
+        // act
+        let hm = HashMap::from(&settings);
+
+        // assert
+        assert_eq!(hm.get("description").map(|s| *s), description.as_deref());
     }
 
     #[tokio::test]
@@ -168,7 +256,7 @@ mod test {
         assert!(err.is_some());
         assert_eq!(
             format!("{}", err.unwrap()),
-            "Current description [something] does not match expected description [test]"
+            "For setting [description]: expected [test] got [something]"
         );
     }
 }
