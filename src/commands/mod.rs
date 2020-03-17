@@ -99,10 +99,10 @@ impl GramOpt {
                 let diffs = settings.diff(&actual_settings);
                 match diffs.as_slice() {
                     [] => Ok(()),
-                    [..] => Err(diffs.iter().fold(String::new(), |mut acc, diff| {
-                        acc.push_str(diff);
-                        acc
-                    }))?,
+                    [..] => {
+                        diffs.iter().for_each(|diff| println!("{}", diff));
+                        Err("Actual settings differ from expected! See output above.")?
+                    }
                 }
             }
         }
