@@ -2,7 +2,7 @@
 name = "gram-cli"
 version = "0.1.0"
 description = """
-gram is a cli for automating github actions.
+gram is a cli for automating github interactions.
 """
 authors = ["Stephen OBrien <wayofthepie@users.noreply.github.com>"]
 edition = "2018"

@@ -24,11 +24,7 @@ merge.allow-squash = false
 ///
 /// # Diff settings
 /// `gram` supports diffing known settings defined in a settings toml file
-/// against the current repository settings. e.g.
-///
-/// ```shell
-/// $ gram diff-settings -t ${TOKEN} -o ${OWNER} -r ${REPO} -s ${PATH_TO_TOML}
-/// ```
+/// against the current repository settings.
 #[derive(Debug, StructOpt)]
 #[structopt(name = "gram")]
 pub struct GramOpt {
