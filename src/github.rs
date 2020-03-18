@@ -16,6 +16,7 @@ pub struct Repository {
     pub description: Option<String>,
     pub allow_squash_merge: Option<bool>,
     pub allow_merge_commit: Option<bool>,
+    pub allow_rebase_merge: Option<bool>,
 }
 
 #[async_trait]

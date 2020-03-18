@@ -130,6 +130,8 @@ pub struct Options {
     allow_squash_merge: Option<bool>,
     #[serde(rename = "allow-merge-commit")]
     allow_merge_commit: Option<bool>,
+    #[serde(rename = "allow-rebase-merge")]
+    allow_rebase_merge: Option<bool>,
 }
 
 impl Copy for Options {}
@@ -148,6 +150,10 @@ impl From<Repository> for GramSettings {
             has_option = true;
             options.allow_merge_commit = repo.allow_merge_commit;
         }
+        if repo.allow_rebase_merge.is_some() {
+            has_option = true;
+            options.allow_rebase_merge = repo.allow_rebase_merge;
+        }
         Self {
             description: repo.description,
             options: if has_option { Some(options) } else { None },
@@ -156,8 +162,9 @@ impl From<Repository> for GramSettings {
 }
 
 static DESCRIPTION_KEY: &str = "description";
-static OPTIONS_ALLOW_SQUASH_KEY: &str = "options.allow-squash-merge";
+static OPTIONS_ALLOW_SQUASH_MERGE_KEY: &str = "options.allow-squash-merge";
 static OPTIONS_ALLOW_MERGE_COMMIT_KEY: &str = "options.allow-merge-commit";
+static OPTIONS_ALLOW_REBASE_MERGE_KEY: &str = "options.allow-rebase-merge";
 
 // TODO: it would be nicer to use a macro/proc-macro to generate this
 // instance. Then the keys can be taken directly from the field names.
@@ -176,9 +183,11 @@ impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
             .map(|val| hm.insert(DESCRIPTION_KEY, val.to_owned()));
         options.as_ref().map(|opts| {
             opts.allow_squash_merge
-                .map(|allow| hm.insert(OPTIONS_ALLOW_SQUASH_KEY, allow.to_string()));
+                .map(|allow| hm.insert(OPTIONS_ALLOW_SQUASH_MERGE_KEY, allow.to_string()));
             opts.allow_merge_commit
                 .map(|allow| hm.insert(OPTIONS_ALLOW_MERGE_COMMIT_KEY, allow.to_string()));
+            opts.allow_rebase_merge
+                .map(|allow| hm.insert(OPTIONS_ALLOW_REBASE_MERGE_KEY, allow.to_string()));
         });
         hm
     }
@@ -242,7 +251,8 @@ impl FileReader for SettingsReader {
 mod test {
     use super::{
         FileReader, GramOpt, GramOptCommand, GramSettings, Options, DESCRIPTION_KEY,
-        OPTIONS_ALLOW_MERGE_COMMIT_KEY, OPTIONS_ALLOW_SQUASH_KEY,
+        OPTIONS_ALLOW_MERGE_COMMIT_KEY, OPTIONS_ALLOW_REBASE_MERGE_KEY,
+        OPTIONS_ALLOW_SQUASH_MERGE_KEY,
     };
     use crate::github::{GithubClient, Repository};
     use anyhow::Result;
@@ -275,6 +285,7 @@ mod test {
                 description: self.description.to_owned(),
                 allow_squash_merge: None,
                 allow_merge_commit: None,
+                allow_rebase_merge: None,
             })
         }
     }
@@ -300,6 +311,7 @@ mod test {
                 description: None,
                 allow_merge_commit: None,
                 allow_squash_merge: None,
+                allow_rebase_merge: None,
             }
         }
     }
@@ -311,6 +323,7 @@ mod test {
         repo.description = Some("description".to_owned());
         repo.allow_merge_commit = Some(true);
         repo.allow_squash_merge = Some(true);
+        repo.allow_rebase_merge = Some(true);
         let r = repo.clone();
 
         // act
@@ -326,6 +339,7 @@ mod test {
         );
         assert_eq!(options.unwrap().allow_squash_merge, r.allow_squash_merge);
         assert_eq!(options.unwrap().allow_merge_commit, r.allow_merge_commit);
+        assert_eq!(options.unwrap().allow_rebase_merge, r.allow_rebase_merge);
     }
 
     #[test]
@@ -336,6 +350,7 @@ mod test {
             options: Some(Options {
                 allow_squash_merge: Some(true),
                 allow_merge_commit: None,
+                allow_rebase_merge: None,
             }),
         };
         // Destructure so the compiler will give out if there are unused fields on
@@ -348,6 +363,7 @@ mod test {
         let Options {
             allow_squash_merge,
             allow_merge_commit,
+            allow_rebase_merge,
         } = options.unwrap();
 
         // act
@@ -356,12 +372,16 @@ mod test {
         // assert
         assert_eq!(hm.get(DESCRIPTION_KEY).map(|s| s.to_owned()), *description);
         assert_eq!(
-            hm.get(OPTIONS_ALLOW_SQUASH_KEY).map(|s| s.to_owned()),
+            hm.get(OPTIONS_ALLOW_SQUASH_MERGE_KEY).map(|s| s.to_owned()),
             allow_squash_merge.map(|b| b.to_string())
         );
         assert_eq!(
             hm.get(OPTIONS_ALLOW_MERGE_COMMIT_KEY).map(|s| s.to_owned()),
             allow_merge_commit.map(|b| b.to_string())
+        );
+        assert_eq!(
+            hm.get(OPTIONS_ALLOW_REBASE_MERGE_KEY).map(|s| s.to_owned()),
+            allow_rebase_merge.map(|b| b.to_string())
         );
     }
 

@@ -3,3 +3,4 @@ description = "Something"
 [options]
 allow-squash-merge = false
 allow-merge-commit = false
+allow-rebase-merge = false
