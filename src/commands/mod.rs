@@ -370,7 +370,6 @@ mod test {
         let err = result.err();
         assert!(err.is_some(), "expected error to have an 'err' value");
 
-
         let err_str = format!("{}", err.unwrap());
         let lines = err_str.trim().split('\n').collect::<Vec<&str>>();
 

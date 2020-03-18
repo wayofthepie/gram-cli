@@ -6,8 +6,9 @@ use reqwest::{
     Client,
 };
 use serde::Deserialize;
+use structopt::clap::{crate_name, crate_version};
 
-static GRAM_USER_AGENT: &str = "gram";
+static GRAM_USER_AGENT: &str = concat!(crate_name!(), " ", crate_version!());
 static GITHUB_BASE_URL: &str = "https://api.github.com";
 
 #[derive(Debug, Deserialize)]
