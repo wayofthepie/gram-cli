@@ -30,6 +30,7 @@ merge.allow-squash = false
 /// $ gram diff-settings -t ${TOKEN} -o ${OWNER} -r ${REPO} -s ${PATH_TO_TOML}
 /// ```
 #[derive(Debug, StructOpt)]
+#[structopt(name = "gram")]
 pub struct GramOpt {
     /// Github token to use.
     ///
