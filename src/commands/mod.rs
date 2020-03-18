@@ -96,10 +96,11 @@ impl GramOpt {
                 let settings = reader.read_settings(&settings)?;
                 let repo = github.repository(&owner, &repo).await?;
                 let actual_settings = GramSettings::from(repo);
-                let diffs = settings.diff(&actual_settings);
+                let mut diffs = settings.diff(&actual_settings);
                 match diffs.as_slice() {
                     [] => Ok(()),
                     [..] => {
+                        diffs.sort();
                         let errors = diffs.iter().fold(String::new(), |mut acc, diff| {
                             acc.push_str(diff);
                             acc.push('\n');
