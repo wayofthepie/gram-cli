@@ -1,5 +1,5 @@
 [package]
-name = "gram"
+name = "gram-cli"
 version = "0.1.0"
 authors = ["Stephen OBrien <wayofthepie@users.noreply.github.com>"]
 edition = "2018"
@@ -17,3 +17,6 @@ toml = "0.5.6"
 [dev-dependencies]
 speculate = "0.1.2"
 
+[[bin]]
+name = "gram"
+path = "src/main.rs"
