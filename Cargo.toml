@@ -1,8 +1,15 @@
 [package]
 name = "gram-cli"
 version = "0.1.0"
+description = """
+gram is a cli for automating github actions.
+"""
 authors = ["Stephen OBrien <wayofthepie@users.noreply.github.com>"]
 edition = "2018"
+readme = "README.md"
+license-file = "LICENSE"
+homepage = "https://github.com/wayofthepie/gram-cli"
+repository = "https://github.com/wayofthepie/gram-cli"
 
 [dependencies]
 anyhow = "1.0.27"
@@ -13,9 +20,6 @@ serde = { version = "1.0.104", features = ["derive"] }
 structopt = "0.3.11"
 tokio = { version = "0.2.13", features = ["macros"] }
 toml = "0.5.6"
-
-[dev-dependencies]
-speculate = "0.1.2"
 
 [[bin]]
 name = "gram"
