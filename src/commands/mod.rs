@@ -176,11 +176,9 @@ impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
             .map(|val| hm.insert(DESCRIPTION_KEY, val.to_owned()));
         options.as_ref().map(|opts| {
             opts.allow_squash_merge
-                .map(|allow| hm.insert(OPTIONS_ALLOW_SQUASH_KEY, allow.to_string()))
-        });
-        options.as_ref().map(|opts| {
+                .map(|allow| hm.insert(OPTIONS_ALLOW_SQUASH_KEY, allow.to_string()));
             opts.allow_merge_commit
-                .map(|allow| hm.insert(OPTIONS_ALLOW_MERGE_COMMIT_KEY, allow.to_string()))
+                .map(|allow| hm.insert(OPTIONS_ALLOW_MERGE_COMMIT_KEY, allow.to_string()));
         });
         hm
     }
