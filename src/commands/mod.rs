@@ -128,6 +128,8 @@ pub struct GramSettings {
 pub struct Options {
     #[serde(rename = "allow-squash-merge")]
     allow_squash_merge: Option<bool>,
+    #[serde(rename = "allow-merge-commit")]
+    allow_merge_commit: Option<bool>,
 }
 
 impl Copy for Options {}
@@ -142,6 +144,10 @@ impl From<Repository> for GramSettings {
             has_option = true;
             options.allow_squash_merge = repo.allow_squash_merge;
         }
+        if repo.allow_merge_commit.is_some() {
+            has_option = true;
+            options.allow_merge_commit = repo.allow_merge_commit;
+        }
         Self {
             description: repo.description,
             options: if has_option { Some(options) } else { None },
@@ -151,6 +157,7 @@ impl From<Repository> for GramSettings {
 
 static DESCRIPTION_KEY: &str = "description";
 static OPTIONS_ALLOW_SQUASH_KEY: &str = "options.allow-squash-merge";
+static OPTIONS_ALLOW_MERGE_COMMIT_KEY: &str = "options.allow-merge-commit";
 
 // TODO: it would be nicer to use a macro/proc-macro to generate this
 // instance. Then the keys can be taken directly from the field names.
@@ -170,6 +177,10 @@ impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
         options.as_ref().map(|opts| {
             opts.allow_squash_merge
                 .map(|allow| hm.insert(OPTIONS_ALLOW_SQUASH_KEY, allow.to_string()))
+        });
+        options.as_ref().map(|opts| {
+            opts.allow_merge_commit
+                .map(|allow| hm.insert(OPTIONS_ALLOW_MERGE_COMMIT_KEY, allow.to_string()))
         });
         hm
     }
@@ -233,7 +244,7 @@ impl FileReader for SettingsReader {
 mod test {
     use super::{
         FileReader, GramOpt, GramOptCommand, GramSettings, Options, DESCRIPTION_KEY,
-        OPTIONS_ALLOW_SQUASH_KEY,
+        OPTIONS_ALLOW_MERGE_COMMIT_KEY, OPTIONS_ALLOW_SQUASH_KEY,
     };
     use crate::github::{GithubClient, Repository};
     use anyhow::Result;
@@ -265,8 +276,58 @@ mod test {
             Ok(Repository {
                 description: self.description.to_owned(),
                 allow_squash_merge: None,
+                allow_merge_commit: None,
             })
         }
+    }
+
+    fn default_command() -> GramOptCommand {
+        GramOptCommand::DiffSettings {
+            owner: "".to_owned(),
+            repo: "".to_owned(),
+            settings: PathBuf::new(),
+        }
+    }
+
+    fn default_opt() -> GramOpt {
+        GramOpt {
+            token: "".to_owned(),
+            command: default_command(),
+        }
+    }
+
+    impl Default for Repository {
+        fn default() -> Self {
+            Repository {
+                description: None,
+                allow_merge_commit: None,
+                allow_squash_merge: None,
+            }
+        }
+    }
+
+    #[test]
+    fn from_repository_for_gram_settings_should_construct_all_repo_fields() {
+        // arrange
+        let mut repo = Repository::default();
+        repo.description = Some("description".to_owned());
+        repo.allow_merge_commit = Some(true);
+        repo.allow_squash_merge = Some(true);
+        let r = repo.clone();
+
+        // act
+        let settings = GramSettings::from(repo);
+
+        // assert
+        assert_eq!(settings.description, r.description);
+
+        let options = settings.options;
+        assert!(
+            options.is_some(),
+            "expected options to be set, but it is None"
+        );
+        assert_eq!(options.unwrap().allow_squash_merge, r.allow_squash_merge);
+        assert_eq!(options.unwrap().allow_merge_commit, r.allow_merge_commit);
     }
 
     #[test]
@@ -276,6 +337,7 @@ mod test {
             description: Some("description".to_owned()),
             options: Some(Options {
                 allow_squash_merge: Some(true),
+                allow_merge_commit: None,
             }),
         };
         // Destructure so the compiler will give out if there are unused fields on
@@ -285,7 +347,10 @@ mod test {
             description,
             options,
         } = &settings;
-        let Options { allow_squash_merge } = options.unwrap();
+        let Options {
+            allow_squash_merge,
+            allow_merge_commit,
+        } = options.unwrap();
 
         // act
         let hm = HashMap::from(&settings);
@@ -295,6 +360,10 @@ mod test {
         assert_eq!(
             hm.get(OPTIONS_ALLOW_SQUASH_KEY).map(|s| s.to_owned()),
             allow_squash_merge.map(|b| b.to_string())
+        );
+        assert_eq!(
+            hm.get(OPTIONS_ALLOW_MERGE_COMMIT_KEY).map(|s| s.to_owned()),
+            allow_merge_commit.map(|b| b.to_string())
         );
     }
 
@@ -308,15 +377,7 @@ mod test {
             "#
             .to_owned(),
         };
-        let command = GramOptCommand::DiffSettings {
-            owner: "wayofthepie".to_owned(),
-            repo: "gram".to_owned(),
-            settings: PathBuf::new(),
-        };
-        let opt = GramOpt {
-            token: "".to_owned(),
-            command,
-        };
+        let opt = default_opt();
 
         // act
         let result = opt.handle_internal(github, settings).await;
@@ -341,15 +402,7 @@ mod test {
                 description = "test"
             "#
         .to_owned();
-        let command = GramOptCommand::DiffSettings {
-            owner: "wayofthepie".to_owned(),
-            repo: "gram".to_owned(),
-            settings: PathBuf::new(),
-        };
-        let opt = GramOpt {
-            token: "".to_owned(),
-            command,
-        };
+        let opt = default_opt();
 
         // act
         let result = opt.handle_internal(github, reader).await;

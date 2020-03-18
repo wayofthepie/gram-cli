@@ -11,10 +11,11 @@ use structopt::clap::{crate_name, crate_version};
 static GRAM_USER_AGENT: &str = concat!(crate_name!(), " ", crate_version!());
 static GITHUB_BASE_URL: &str = "https://api.github.com";
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Repository {
     pub description: Option<String>,
     pub allow_squash_merge: Option<bool>,
+    pub allow_merge_commit: Option<bool>,
 }
 
 #[async_trait]
