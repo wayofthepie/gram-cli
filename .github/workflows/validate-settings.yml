@@ -1,0 +1,15 @@
+name: validate-settings
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: gram-cli
+      uses: wayofthepie/gram-action@0.2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        diff: true
