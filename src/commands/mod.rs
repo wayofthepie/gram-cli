@@ -7,10 +7,6 @@ use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 
 /// Supported commands and options.
-///
-/// # Diff settings
-/// `gram` supports diffing known settings defined in a settings toml file
-/// against the current repository settings.
 #[derive(Debug, StructOpt)]
 #[structopt(name = "gram")]
 pub struct GramOpt {

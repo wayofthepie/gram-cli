@@ -2,18 +2,11 @@
 `gram` is a cli to help automate common repository tasks.
 
 # Usage
+See the cli help for more information.
 
-## Diff settings
-`gram` supports diffing current repository settings with expected settings 
-defined in a toml file. 
-
-```
-$ gram -h
+```bash
 gram 0.1.0
-Supported commands and options.
-
-# Diff settings `gram` supports diffing known settings defined in a settings toml file against the current repository
-settings.
+Supported commands
 
 USAGE:
     gram --token <token> <SUBCOMMAND>
@@ -26,7 +19,6 @@ OPTIONS:
     -t, --token <token>    Github token to use [env: GITHUB_TOKEN=]
 
 SUBCOMMANDS:
-    diff-settings    Diff actual settings with expected settings defined in a settings toml file
-    help             Prints this message or the help of the given subcommand(s)
-
+    help        Prints this message or the help of the given subcommand(s)
+    settings    Interactions for repository settings
 ```
