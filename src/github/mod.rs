@@ -1,15 +1,15 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use reqwest::{
     header,
     header::{HeaderMap, HeaderValue},
-    Client,
+    Client, Response,
 };
 use serde::Deserialize;
 use structopt::clap::{crate_name, crate_version};
 
 static GRAM_USER_AGENT: &str = concat!(crate_name!(), " ", crate_version!());
-static GITHUB_BASE_URL: &str = "https://api.github.com";
+pub static GITHUB_BASE_URL: &str = "https://api.github.com";
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Repository {
@@ -21,21 +21,22 @@ pub struct Repository {
 
 #[async_trait]
 pub trait GithubClient {
-    async fn repository(&self, owner: &str, repo: &str) -> Result<Repository>;
+    async fn get(&self, url: &str) -> Result<Response>;
 }
 
 pub struct Github {
+    base_url: &'static str,
     client: Client,
 }
 
 impl Github {
-    pub fn new(token: &str) -> Self {
+    pub fn new(token: &str, base_url: &'static str) -> Self {
         let client = Client::builder()
             .user_agent(GRAM_USER_AGENT)
             .default_headers(Github::default_headers(token))
             .build()
             .unwrap();
-        Self { client }
+        Self { base_url, client }
     }
 
     fn default_headers(token: &str) -> HeaderMap {
@@ -55,15 +56,31 @@ impl Github {
 
 #[async_trait]
 impl GithubClient for Github {
-    async fn repository(&self, owner: &str, repo: &str) -> Result<Repository> {
-        let repository = self
-            .client
-            .get(&format!("{}/repos/{}/{}", GITHUB_BASE_URL, owner, repo))
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
+    async fn get(&self, url: &str) -> Result<Response> {
+        self.client
+            .get(&format!("{}{}", self.base_url, url))
             .send()
             .await?
-            .json::<Repository>()
-            .await?;
-        Ok(repository)
+            .error_for_status()
+            .map_err(|e| anyhow!("{}", e))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Github, GithubClient};
+    use mockito::mock;
+    use tokio;
+
+    #[tokio::test]
+    async fn test_something() {
+        let _m = mock("GET", "/repos/owner/repo")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{ "description": "test" } "#)
+            .create();
+        let client = Github::new("test", "base");
+        let repo = client.get("").await;
+        println!("{:#?}", repo);
     }
 }

@@ -20,7 +20,12 @@ serde = { version = "1.0.104", features = ["derive"] }
 structopt = "0.3.11"
 tokio = { version = "0.2.13", features = ["macros"] }
 toml = "0.5.6"
+mockito = "0.23.3"
 
 [[bin]]
 name = "gram"
 path = "src/main.rs"
+
+[dev-dependencies]
+mockito = "0.23.3"
+http = "0.2.0"

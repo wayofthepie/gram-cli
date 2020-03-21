@@ -1,6 +1,6 @@
 use super::GramSettings;
 use crate::commands::FileReader;
-use crate::github::GithubClient;
+use crate::github::{GithubClient, Repository};
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -32,7 +32,11 @@ impl Diff {
         G: GithubClient,
     {
         let settings = reader.read_settings(&self.settings_file)?;
-        let repo = github.repository(&self.owner, &self.repo).await?;
+        let repo = github
+            .get(&format!("/repos/{}/{}", &self.owner, &self.repo))
+            .await?
+            .json::<Repository>()
+            .await?;
         let actual_settings = GramSettings::from(repo);
         let mut diffs = settings.diff(&actual_settings);
         match diffs.as_slice() {

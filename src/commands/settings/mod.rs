@@ -135,23 +135,23 @@ mod test {
     use crate::github::{GithubClient, Repository};
     use anyhow::Result;
     use async_trait::async_trait;
+    use http::response;
+    use reqwest::Response;
+
     use std::clone::Clone;
     use std::collections::HashMap;
 
     #[derive(Default)]
     struct FakeGithubRepo {
-        description: Option<String>,
+        repo: &'static str,
     }
 
     #[async_trait]
     impl GithubClient for FakeGithubRepo {
-        async fn repository(&self, _: &str, _: &str) -> Result<Repository> {
-            Ok(Repository {
-                description: self.description.to_owned(),
-                allow_squash_merge: None,
-                allow_merge_commit: None,
-                allow_rebase_merge: None,
-            })
+        async fn get(&self, _url: &str) -> Result<Response> {
+            let builder = response::Builder::new();
+            let r = builder.body(self.repo)?;
+            Ok(r.into())
         }
     }
 

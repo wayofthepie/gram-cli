@@ -1,14 +1,13 @@
 mod settings;
-use crate::github::{Github, GithubClient};
+use crate::github::{Github, GithubClient, GITHUB_BASE_URL};
 use anyhow::Result;
 use settings::{GramSettings, SettingsCmd};
 use std::fs;
 use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 
-/// Supported commands and options.
+/// Supported commands and options.  #[derive(Debug, StructOpt)] #[structopt(name = "gram")]
 #[derive(Debug, StructOpt)]
-#[structopt(name = "gram")]
 pub struct GramOpt {
     /// Github token to use.
     ///
@@ -42,7 +41,7 @@ impl GramOpt {
     /// function instead, this is ok in this case.
     pub async fn handle(self) -> Result<()> {
         let token = &self.token;
-        let github = Github::new(token);
+        let github = Github::new(token, GITHUB_BASE_URL);
         let reader = SettingsReader::new();
         self.handle_internal(github, reader).await
     }
@@ -89,9 +88,11 @@ impl FileReader for SettingsReader {
 mod test {
     use super::{FileReader, GramOpt, GramOptCommand};
     use crate::commands::settings::{Diff, SettingsCmd};
-    use crate::github::{GithubClient, Repository};
+    use crate::github::GithubClient;
     use anyhow::Result;
     use async_trait::async_trait;
+    use http::response;
+    use reqwest::Response;
     use std::clone::Clone;
     use std::path::{Path, PathBuf};
     use tokio;
@@ -109,18 +110,15 @@ mod test {
 
     #[derive(Default)]
     struct FakeGithubRepo {
-        description: Option<String>,
+        repo: &'static str,
     }
 
     #[async_trait]
     impl GithubClient for FakeGithubRepo {
-        async fn repository(&self, _: &str, _: &str) -> Result<Repository> {
-            Ok(Repository {
-                description: self.description.to_owned(),
-                allow_squash_merge: None,
-                allow_merge_commit: None,
-                allow_rebase_merge: None,
-            })
+        async fn get(&self, _: &str) -> Result<Response> {
+            let builder = response::Builder::new();
+            let r = builder.body(self.repo)?;
+            Ok(r.into())
         }
     }
 
@@ -145,7 +143,8 @@ mod test {
     #[tokio::test]
     async fn handle_it_should_error_if_settings_toml_has_a_value_but_the_repo_does_not() {
         // arrange
-        let github = FakeGithubRepo::default();
+        let mut github = FakeGithubRepo::default();
+        github.repo = r#" { "description": null } "#;
         let settings = FakeFileReader {
             file_as_str: r#"
                description = "test"
@@ -171,7 +170,7 @@ mod test {
     async fn handle_it_should_error_if_settings_toml_and_repo_have_different_description() {
         // arrange
         let mut github = FakeGithubRepo::default();
-        github.description = Some("something else".to_owned());
+        github.repo = r#"{ "description": "something else" }"#;
         let mut reader = FakeFileReader::default();
         reader.file_as_str = r#"
                description = "test"
