@@ -128,7 +128,7 @@ mod test {
         let diff = Diff {
             owner: "".to_owned(),
             repo: "".to_owned(),
-            settings: PathBuf::new(),
+            settings_file: PathBuf::new(),
         };
         GramOptCommand::Settings {
             cmd: SettingsCmd::Diff(diff),

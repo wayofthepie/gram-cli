@@ -5,20 +5,6 @@ use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-static SETTINGS_HELP: &str = concat!(
-    "Path to the settings file",
-    r#"
-
-This is a toml file. For example:
------------------------------------------
-description = "This is a test repository"
-
-[settings]
-merge.allow-squash = false
------------------------------------------
-"#
-);
-
 /// Diff actual settings with expected settings
 /// defined in a settings toml file.
 ///
@@ -35,8 +21,8 @@ pub struct Diff {
     pub repo: String,
 
     /// Path to the settings TOML file.
-    #[structopt(short, long, help = SETTINGS_HELP)]
-    pub settings: PathBuf,
+    #[structopt(name = "file", short, long)]
+    pub settings_file: PathBuf,
 }
 
 impl Diff {
@@ -45,7 +31,7 @@ impl Diff {
         F: FileReader,
         G: GithubClient,
     {
-        let settings = reader.read_settings(&self.settings)?;
+        let settings = reader.read_settings(&self.settings_file)?;
         let repo = github.repository(&self.owner, &self.repo).await?;
         let actual_settings = GramSettings::from(repo);
         let mut diffs = settings.diff(&actual_settings);
