@@ -80,11 +80,16 @@ impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
             .as_ref()
             .map(|val| hm.insert(DESCRIPTION_KEY, val.to_owned()));
         if let Some(opts) = options.as_ref() {
-            opts.allow_squash_merge
+            let Options {
+                allow_squash_merge,
+                allow_merge_commit,
+                allow_rebase_merge,
+            } = opts;
+            allow_squash_merge
                 .map(|allow| hm.insert(OPTIONS_ALLOW_SQUASH_MERGE_KEY, allow.to_string()));
-            opts.allow_merge_commit
+            allow_merge_commit
                 .map(|allow| hm.insert(OPTIONS_ALLOW_MERGE_COMMIT_KEY, allow.to_string()));
-            opts.allow_rebase_merge
+            allow_rebase_merge
                 .map(|allow| hm.insert(OPTIONS_ALLOW_REBASE_MERGE_KEY, allow.to_string()));
         }
         hm
