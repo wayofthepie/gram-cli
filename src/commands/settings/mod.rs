@@ -1,6 +1,15 @@
+mod diff;
 use crate::github::Repository;
+pub use diff::Diff;
 use serde::Deserialize;
 use std::collections::HashMap;
+use structopt::StructOpt;
+
+/// Supported settings subcommands.
+#[derive(Debug, StructOpt)]
+pub enum SettingsCmd {
+    Diff(Diff),
+}
 
 /// Repository settings that `gram` is able to see.
 ///

@@ -1,24 +1,10 @@
 mod settings;
 use crate::github::{Github, GithubClient};
-use anyhow::{anyhow, Result};
-use settings::GramSettings;
+use anyhow::Result;
+use settings::{GramSettings, SettingsCmd};
 use std::fs;
 use std::path::{Path, PathBuf};
 use structopt::StructOpt;
-
-static SETTINGS_HELP: &str = concat!(
-    "Path to the settings file",
-    r#"
-
-This is a toml file. For example:
------------------------------------------
-description = "This is a test repository"
-
-[settings]
-merge.allow-squash = false
------------------------------------------
-"#
-);
 
 /// Supported commands and options.
 ///
@@ -43,23 +29,10 @@ pub struct GramOpt {
 /// Supported commands.
 #[derive(Debug, StructOpt)]
 pub enum GramOptCommand {
-    /// Diff actual settings with expected settings
-    /// defined in a settings toml file.
-    ///
-    /// gram will only diff settings defined in the given toml file. It
-    /// will not mention any settings which are not defined in that file.
-    DiffSettings {
-        /// The owner of the repository.
-        #[structopt(short, long)]
-        owner: String,
-
-        /// The name of the repository.
-        #[structopt(short, long)]
-        repo: String,
-
-        /// Path to the settings TOML file.
-        #[structopt(short, long, help = SETTINGS_HELP)]
-        settings: PathBuf,
+    /// Interactions for repository settings.
+    Settings {
+        #[structopt(flatten)]
+        cmd: SettingsCmd,
     },
 }
 
@@ -71,7 +44,7 @@ impl GramOpt {
     /// be used with a token, and this is the first place we can access that token.
     /// This does lead to having to test the [handle_internal](struct.GramOpt.html#method.handle_internal)
     /// function instead, this is ok in this case.
-    pub async fn handle(&self) -> Result<()> {
+    pub async fn handle(self) -> Result<()> {
         let token = &self.token;
         let github = Github::new(token);
         let reader = SettingsReader::new();
@@ -79,34 +52,15 @@ impl GramOpt {
     }
 
     /// Handle the command and args given to `gram`.
-    async fn handle_internal<G, F>(&self, github: G, reader: F) -> Result<()>
+    async fn handle_internal<G, F>(self, github: G, reader: F) -> Result<()>
     where
         G: GithubClient,
         F: FileReader,
     {
-        match &self.command {
-            GramOptCommand::DiffSettings {
-                owner,
-                repo,
-                settings,
-            } => {
-                let settings = reader.read_settings(&settings)?;
-                let repo = github.repository(&owner, &repo).await?;
-                let actual_settings = GramSettings::from(repo);
-                let mut diffs = settings.diff(&actual_settings);
-                match diffs.as_slice() {
-                    [] => Ok(()),
-                    [..] => {
-                        diffs.sort();
-                        let errors = diffs.iter().fold(String::new(), |mut acc, diff| {
-                            acc.push_str(diff);
-                            acc.push('\n');
-                            acc
-                        });
-                        Err(anyhow!("Actual settings differ from expected!\n{}", errors))
-                    }
-                }
-            }
+        match self.command {
+            GramOptCommand::Settings { cmd } => match cmd {
+                SettingsCmd::Diff(diff) => diff.handle(reader, github).await,
+            },
         }
     }
 }
@@ -138,6 +92,7 @@ impl FileReader for SettingsReader {
 #[cfg(test)]
 mod test {
     use super::{FileReader, GramOpt, GramOptCommand};
+    use crate::commands::settings::{Diff, SettingsCmd};
     use crate::github::{GithubClient, Repository};
     use anyhow::Result;
     use async_trait::async_trait;
@@ -174,10 +129,13 @@ mod test {
     }
 
     fn default_command() -> GramOptCommand {
-        GramOptCommand::DiffSettings {
+        let diff = Diff {
             owner: "".to_owned(),
             repo: "".to_owned(),
             settings: PathBuf::new(),
+        };
+        GramOptCommand::Settings {
+            cmd: SettingsCmd::Diff(diff),
         }
     }
 
@@ -194,8 +152,8 @@ mod test {
         let github = FakeGithubRepo::default();
         let settings = FakeFileReader {
             file_as_str: r#"
-                description = "test"
-            "#
+               description = "test"
+           "#
             .to_owned(),
         };
         let opt = default_opt();
@@ -220,8 +178,8 @@ mod test {
         github.description = Some("something else".to_owned());
         let mut reader = FakeFileReader::default();
         reader.file_as_str = r#"
-                description = "test"
-            "#
+               description = "test"
+           "#
         .to_owned();
         let opt = default_opt();
 
