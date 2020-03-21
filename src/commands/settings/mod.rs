@@ -67,7 +67,7 @@ static OPTIONS_ALLOW_REBASE_MERGE_KEY: &str = "options.allow-rebase-merge";
 // TODO: it would be nicer to use a macro/proc-macro to generate this
 // instance. Then the keys can be taken directly from the field names.
 //
-// Tell clippy to ignore the implicit hasher here. We want to used the default.
+// Tell clippy to ignore the implicit hasher here. We want to use the default.
 #[allow(clippy::implicit_hasher)]
 impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
     fn from(settings: &'a GramSettings) -> Self {
@@ -197,8 +197,8 @@ mod test {
             description: Some("description".to_owned()),
             options: Some(Options {
                 allow_squash_merge: Some(true),
-                allow_merge_commit: None,
-                allow_rebase_merge: None,
+                allow_merge_commit: Some(true),
+                allow_rebase_merge: Some(true),
             }),
         };
         // Destructure so the compiler will give out if there are unused fields on
