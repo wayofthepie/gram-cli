@@ -1,0 +1,6 @@
+description = "Cli for automating interactions with repositories"
+
+[options]
+allow-squash-merge = false
+allow-merge-commit = false
+allow-rebase-merge = true
