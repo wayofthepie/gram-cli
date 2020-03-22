@@ -2,6 +2,7 @@ use super::GramSettings;
 use crate::commands::FileReader;
 use crate::github::{GithubClient, Repository};
 use anyhow::{anyhow, Result};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -31,14 +32,14 @@ impl Diff {
         F: FileReader,
         G: GithubClient,
     {
-        let settings = reader.read_settings(&self.settings_file)?;
+        let configured_settings = reader.read_settings(&self.settings_file)?;
         let repo = github
             .get(&format!("/repos/{}/{}", &self.owner, &self.repo))
             .await?
             .json::<Repository>()
             .await?;
         let actual_settings = GramSettings::from(repo);
-        let mut diffs = settings.diff(&actual_settings);
+        let mut diffs = Diff::diff(&configured_settings, &actual_settings);
         match diffs.as_slice() {
             [] => Ok(()),
             [..] => {
@@ -51,5 +52,33 @@ impl Diff {
                 Err(anyhow!("Actual settings differ from expected!\n{}", errors))
             }
         }
+    }
+
+    /// Get the diff between two [GramSettings](commands.struct.GramSettings.html).
+    fn diff(left: &GramSettings, right: &GramSettings) -> Vec<String> {
+        let hm = HashMap::from(left);
+        let other_hm = HashMap::from(right);
+        hm.iter()
+            .map(|(key, expected_val)| {
+                let other_val = other_hm.get(key);
+                if other_val == None {
+                    return Some(format!(
+                        "[{}]: expected [{}] but it has no value",
+                        key, expected_val
+                    ));
+                }
+                other_val.and_then(|other_val| {
+                    if expected_val != other_val {
+                        Some(format!(
+                            "[{}]: expected [{}] got [{}]",
+                            key, expected_val, other_val
+                        ))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .flatten()
+            .collect::<Vec<String>>()
     }
 }

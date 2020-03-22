@@ -93,36 +93,6 @@ impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
     }
 }
 
-impl GramSettings {
-    /// Get the diff between two [GramSettings](commands.struct.GramSettings.html).
-    pub fn diff(&self, other: &GramSettings) -> Vec<String> {
-        let hm = HashMap::from(self);
-        let other_hm = HashMap::from(other);
-        hm.iter()
-            .map(|(key, expected_val)| {
-                let other_val = other_hm.get(key);
-                if other_val == None {
-                    return Some(format!(
-                        "[{}]: expected [{}] but it has no value",
-                        key, expected_val
-                    ));
-                }
-                other_val.and_then(|other_val| {
-                    if expected_val != other_val {
-                        Some(format!(
-                            "[{}]: expected [{}] got [{}]",
-                            key, expected_val, other_val
-                        ))
-                    } else {
-                        None
-                    }
-                })
-            })
-            .flatten()
-            .collect::<Vec<String>>()
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::{
