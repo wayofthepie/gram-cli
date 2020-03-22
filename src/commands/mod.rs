@@ -6,8 +6,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 
-/// Supported commands and options.  #[derive(Debug, StructOpt)] #[structopt(name = "gram")]
+/// Supported commands and options.  
 #[derive(Debug, StructOpt)]
+#[structopt(name = "gram")]
 pub struct GramOpt {
     /// Github token to use.
     ///
@@ -40,8 +41,7 @@ impl GramOpt {
     /// This does lead to having to test the [handle_internal](struct.GramOpt.html#method.handle_internal)
     /// function instead, this is ok in this case.
     pub async fn handle(self) -> Result<()> {
-        let token = &self.token;
-        let github = Github::new(token, GITHUB_BASE_URL);
+        let github = Github::new(self.token.clone(), GITHUB_BASE_URL);
         let reader = SettingsReader::new();
         self.handle_internal(github, reader).await
     }
@@ -144,7 +144,13 @@ mod test {
     async fn handle_it_should_error_if_settings_toml_has_a_value_but_the_repo_does_not() {
         // arrange
         let mut github = FakeGithubRepo::default();
-        github.repo = r#" { "description": null } "#;
+        github.repo = r#"
+            { 
+                "description": null,
+                "allow_merge_commit": true,
+                "allow_squash_merge": true,
+                "allow_rebase_merge": true
+            }"#;
         let settings = FakeFileReader {
             file_as_str: r#"
                description = "test"
@@ -170,7 +176,13 @@ mod test {
     async fn handle_it_should_error_if_settings_toml_and_repo_have_different_description() {
         // arrange
         let mut github = FakeGithubRepo::default();
-        github.repo = r#"{ "description": "something else" }"#;
+        github.repo = r#"
+            { 
+                "description": "something else",
+                "allow_merge_commit": true,
+                "allow_squash_merge": true,
+                "allow_rebase_merge": true
+            }"#;
         let mut reader = FakeFileReader::default();
         reader.file_as_str = r#"
                description = "test"
@@ -214,7 +226,7 @@ mod test {
             .enumerate()
             .for_each(|(index, &expected)| {
                 assert_eq!(
-                    lines[index], expected,
+                    expected, lines[index],
                     "line {} has unexpected value",
                     index
                 )

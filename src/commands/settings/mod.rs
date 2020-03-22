@@ -38,23 +38,13 @@ impl Copy for Options {}
 /// and [GramSettings](struct.GramSettings.html) simplifies actions like diff.
 impl From<Repository> for GramSettings {
     fn from(repo: Repository) -> Self {
-        let mut has_option = false;
         let mut options: Options = Options::default();
-        if repo.allow_squash_merge.is_some() {
-            has_option = true;
-            options.allow_squash_merge = repo.allow_squash_merge;
-        }
-        if repo.allow_merge_commit.is_some() {
-            has_option = true;
-            options.allow_merge_commit = repo.allow_merge_commit;
-        }
-        if repo.allow_rebase_merge.is_some() {
-            has_option = true;
-            options.allow_rebase_merge = repo.allow_rebase_merge;
-        }
+        options.allow_squash_merge = Some(repo.allow_squash_merge);
+        options.allow_merge_commit = Some(repo.allow_merge_commit);
+        options.allow_rebase_merge = Some(repo.allow_rebase_merge);
         Self {
             description: repo.description,
-            options: if has_option { Some(options) } else { None },
+            options: Some(options),
         }
     }
 }
@@ -132,35 +122,16 @@ mod test {
         GramSettings, Options, DESCRIPTION_KEY, OPTIONS_ALLOW_MERGE_COMMIT_KEY,
         OPTIONS_ALLOW_REBASE_MERGE_KEY, OPTIONS_ALLOW_SQUASH_MERGE_KEY,
     };
-    use crate::github::{GithubClient, Repository};
-    use anyhow::Result;
-    use async_trait::async_trait;
-    use http::response;
-    use reqwest::Response;
-
+    use crate::github::Repository;
     use std::clone::Clone;
     use std::collections::HashMap;
 
-    #[derive(Default)]
-    struct FakeGithubRepo {
-        repo: &'static str,
-    }
-
-    #[async_trait]
-    impl GithubClient for FakeGithubRepo {
-        async fn get(&self, _url: &str) -> Result<Response> {
-            let builder = response::Builder::new();
-            let r = builder.body(self.repo)?;
-            Ok(r.into())
-        }
-    }
-
     fn default_repo() -> Repository {
         Repository {
-            description: None,
-            allow_merge_commit: None,
-            allow_squash_merge: None,
-            allow_rebase_merge: None,
+            description: Some("".to_owned()),
+            allow_merge_commit: false,
+            allow_squash_merge: false,
+            allow_rebase_merge: false,
         }
     }
 
@@ -169,25 +140,34 @@ mod test {
         // arrange
         let mut repo = default_repo();
         repo.description = Some("description".to_owned());
-        repo.allow_merge_commit = Some(true);
-        repo.allow_squash_merge = Some(true);
-        repo.allow_rebase_merge = Some(true);
+        repo.allow_merge_commit = true;
+        repo.allow_squash_merge = true;
+        repo.allow_rebase_merge = true;
         let r = repo.clone();
 
         // act
         let settings = GramSettings::from(repo);
 
         // assert
-        assert_eq!(settings.description, r.description);
+        assert_eq!(r.description, settings.description);
 
         let options = settings.options;
         assert!(
             options.is_some(),
             "expected options to be set, but it is None"
         );
-        assert_eq!(options.unwrap().allow_squash_merge, r.allow_squash_merge);
-        assert_eq!(options.unwrap().allow_merge_commit, r.allow_merge_commit);
-        assert_eq!(options.unwrap().allow_rebase_merge, r.allow_rebase_merge);
+        assert_eq!(
+            options.unwrap().allow_squash_merge.unwrap(),
+            r.allow_squash_merge
+        );
+        assert_eq!(
+            options.unwrap().allow_merge_commit.unwrap(),
+            r.allow_merge_commit
+        );
+        assert_eq!(
+            options.unwrap().allow_rebase_merge.unwrap(),
+            r.allow_rebase_merge
+        );
     }
 
     #[test]
