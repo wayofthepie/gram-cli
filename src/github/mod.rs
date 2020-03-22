@@ -17,6 +17,7 @@ pub struct Repository {
     pub allow_squash_merge: bool,
     pub allow_merge_commit: bool,
     pub allow_rebase_merge: bool,
+    pub delete_branch_on_merge: bool,
 }
 
 #[async_trait]
@@ -118,19 +119,22 @@ mod test {
         let allow_merge_commit = true;
         let allow_squash_merge = false;
         let allow_rebase_merge = true;
+        let delete_branch_on_merge = true;
         let json = format!(
             r#"
             {{
                 "description": {},
                 "allow_merge_commit": {},
                 "allow_squash_merge": {},
-                "allow_rebase_merge": {}
+                "allow_rebase_merge": {},
+                "delete_branch_on_merge": {}
             }}
         "#,
             to_json_value(&description),
             to_json_value(&allow_merge_commit),
             to_json_value(&allow_squash_merge),
             to_json_value(&allow_rebase_merge),
+            to_json_value(&delete_branch_on_merge),
         );
 
         // act
@@ -141,5 +145,6 @@ mod test {
         assert_eq!(allow_merge_commit, repo.allow_merge_commit);
         assert_eq!(allow_squash_merge, repo.allow_squash_merge);
         assert_eq!(allow_rebase_merge, repo.allow_rebase_merge);
+        assert_eq!(delete_branch_on_merge, repo.delete_branch_on_merge);
     }
 }

@@ -149,7 +149,8 @@ mod test {
                 "description": null,
                 "allow_merge_commit": true,
                 "allow_squash_merge": true,
-                "allow_rebase_merge": true
+                "allow_rebase_merge": true,
+                "delete_branch_on_merge": true
             }"#;
         let settings = FakeFileReader {
             file_as_str: r#"
@@ -181,7 +182,8 @@ mod test {
                 "description": "something else",
                 "allow_merge_commit": true,
                 "allow_squash_merge": true,
-                "allow_rebase_merge": true
+                "allow_rebase_merge": true,
+                "delete_branch_on_merge": true
             }"#;
         let mut reader = FakeFileReader::default();
         reader.file_as_str = r#"

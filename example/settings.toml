@@ -4,3 +4,4 @@ description = "Something"
 allow-squash-merge = false
 allow-merge-commit = false
 allow-rebase-merge = false
+delete-branch-on-merge = true

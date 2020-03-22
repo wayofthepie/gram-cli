@@ -30,6 +30,8 @@ pub struct Options {
     pub allow_merge_commit: Option<bool>,
     #[serde(rename = "allow-rebase-merge")]
     pub allow_rebase_merge: Option<bool>,
+    #[serde(rename = "delete-branch-on-merge")]
+    pub delete_branch_on_merge: Option<bool>,
 }
 
 impl Copy for Options {}
@@ -42,6 +44,7 @@ impl From<Repository> for GramSettings {
         options.allow_squash_merge = Some(repo.allow_squash_merge);
         options.allow_merge_commit = Some(repo.allow_merge_commit);
         options.allow_rebase_merge = Some(repo.allow_rebase_merge);
+        options.delete_branch_on_merge = Some(repo.delete_branch_on_merge);
         Self {
             description: repo.description,
             options: Some(options),
@@ -53,6 +56,7 @@ static DESCRIPTION_KEY: &str = "description";
 static OPTIONS_ALLOW_SQUASH_MERGE_KEY: &str = "options.allow-squash-merge";
 static OPTIONS_ALLOW_MERGE_COMMIT_KEY: &str = "options.allow-merge-commit";
 static OPTIONS_ALLOW_REBASE_MERGE_KEY: &str = "options.allow-rebase-merge";
+static OPTIONS_DELETE_BRANCH_ON_MERGE_KEY: &str = "options.delete-branch-on-merge";
 
 // TODO: it would be nicer to use a macro/proc-macro to generate this
 // instance. Then the keys can be taken directly from the field names.
@@ -74,6 +78,7 @@ impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
                 allow_squash_merge,
                 allow_merge_commit,
                 allow_rebase_merge,
+                delete_branch_on_merge,
             } = opts;
             allow_squash_merge
                 .map(|allow| hm.insert(OPTIONS_ALLOW_SQUASH_MERGE_KEY, allow.to_string()));
@@ -81,6 +86,8 @@ impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
                 .map(|allow| hm.insert(OPTIONS_ALLOW_MERGE_COMMIT_KEY, allow.to_string()));
             allow_rebase_merge
                 .map(|allow| hm.insert(OPTIONS_ALLOW_REBASE_MERGE_KEY, allow.to_string()));
+            delete_branch_on_merge
+                .map(|delete| hm.insert(OPTIONS_DELETE_BRANCH_ON_MERGE_KEY, delete.to_string()));
         }
         hm
     }
@@ -121,6 +128,7 @@ mod test {
     use super::{
         GramSettings, Options, DESCRIPTION_KEY, OPTIONS_ALLOW_MERGE_COMMIT_KEY,
         OPTIONS_ALLOW_REBASE_MERGE_KEY, OPTIONS_ALLOW_SQUASH_MERGE_KEY,
+        OPTIONS_DELETE_BRANCH_ON_MERGE_KEY,
     };
     use crate::github::Repository;
     use std::clone::Clone;
@@ -132,6 +140,7 @@ mod test {
             allow_merge_commit: false,
             allow_squash_merge: false,
             allow_rebase_merge: false,
+            delete_branch_on_merge: false,
         }
     }
 
@@ -143,6 +152,7 @@ mod test {
         repo.allow_merge_commit = true;
         repo.allow_squash_merge = true;
         repo.allow_rebase_merge = true;
+        repo.delete_branch_on_merge = true;
         let r = repo.clone();
 
         // act
@@ -156,17 +166,13 @@ mod test {
             options.is_some(),
             "expected options to be set, but it is None"
         );
+        let options = options.unwrap();
+        assert_eq!(options.allow_squash_merge.unwrap(), r.allow_squash_merge);
+        assert_eq!(options.allow_merge_commit.unwrap(), r.allow_merge_commit);
+        assert_eq!(options.allow_rebase_merge.unwrap(), r.allow_rebase_merge);
         assert_eq!(
-            options.unwrap().allow_squash_merge.unwrap(),
-            r.allow_squash_merge
-        );
-        assert_eq!(
-            options.unwrap().allow_merge_commit.unwrap(),
-            r.allow_merge_commit
-        );
-        assert_eq!(
-            options.unwrap().allow_rebase_merge.unwrap(),
-            r.allow_rebase_merge
+            options.delete_branch_on_merge.unwrap(),
+            r.delete_branch_on_merge
         );
     }
 
@@ -179,6 +185,7 @@ mod test {
                 allow_squash_merge: Some(true),
                 allow_merge_commit: Some(true),
                 allow_rebase_merge: Some(true),
+                delete_branch_on_merge: Some(true),
             }),
         };
         // Destructure so the compiler will give out if there are unused fields on
@@ -192,6 +199,7 @@ mod test {
             allow_squash_merge,
             allow_merge_commit,
             allow_rebase_merge,
+            delete_branch_on_merge,
         } = options.unwrap();
 
         // act
@@ -210,6 +218,11 @@ mod test {
         assert_eq!(
             hm.get(OPTIONS_ALLOW_REBASE_MERGE_KEY).map(|s| s.to_owned()),
             allow_rebase_merge.map(|b| b.to_string())
+        );
+        assert_eq!(
+            hm.get(OPTIONS_DELETE_BRANCH_ON_MERGE_KEY)
+                .map(|s| s.to_owned()),
+            delete_branch_on_merge.map(|b| b.to_string())
         );
     }
 }
