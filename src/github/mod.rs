@@ -56,7 +56,7 @@ impl<'a> Github<'a> {
 }
 
 #[async_trait]
-impl<'a> GithubClient for Github<'a> {
+impl GithubClient for Github<'_> {
     async fn get(&self, url: &str) -> Result<Response> {
         let response = self
             .client
