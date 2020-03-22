@@ -1,8 +1,11 @@
 mod diff;
 use crate::github::Repository;
+use anyhow::Result;
 pub use diff::Diff;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 
 /// Supported settings subcommands.
@@ -90,6 +93,30 @@ impl<'a> From<&'a GramSettings> for HashMap<&'a str, String> {
                 .map(|delete| hm.insert(OPTIONS_DELETE_BRANCH_ON_MERGE_KEY, delete.to_string()));
         }
         hm
+    }
+}
+
+pub struct SettingsReader;
+
+impl SettingsReader {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+pub trait FileReader {
+    fn read_to_string<P: AsRef<Path>>(&self, path: P) -> Result<String, std::io::Error>;
+
+    fn read_settings(&self, settings_location: &PathBuf) -> Result<GramSettings> {
+        let settings_str = self.read_to_string(settings_location)?;
+        let settings = toml::from_str::<GramSettings>(&settings_str)?;
+        Ok(settings)
+    }
+}
+
+impl FileReader for SettingsReader {
+    fn read_to_string<P: AsRef<Path>>(&self, path: P) -> Result<String, std::io::Error> {
+        fs::read_to_string(path)
     }
 }
 

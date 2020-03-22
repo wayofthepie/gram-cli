@@ -1,9 +1,7 @@
 mod settings;
 use crate::github::{Github, GithubClient, GITHUB_BASE_URL};
 use anyhow::Result;
-use settings::{GramSettings, SettingsCmd};
-use std::fs;
-use std::path::{Path, PathBuf};
+use settings::{FileReader, SettingsCmd, SettingsReader};
 use structopt::StructOpt;
 
 /// Supported commands and options.  
@@ -57,30 +55,6 @@ impl GramOpt {
                 SettingsCmd::Diff(diff) => diff.handle(reader, github).await,
             },
         }
-    }
-}
-
-pub trait FileReader {
-    fn read_to_string<P: AsRef<Path>>(&self, path: P) -> Result<String, std::io::Error>;
-
-    fn read_settings(&self, settings_location: &PathBuf) -> Result<GramSettings> {
-        let settings_str = self.read_to_string(settings_location)?;
-        let settings = toml::from_str::<GramSettings>(&settings_str)?;
-        Ok(settings)
-    }
-}
-
-pub struct SettingsReader;
-
-impl SettingsReader {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl FileReader for SettingsReader {
-    fn read_to_string<P: AsRef<Path>>(&self, path: P) -> Result<String, std::io::Error> {
-        fs::read_to_string(path)
     }
 }
 
