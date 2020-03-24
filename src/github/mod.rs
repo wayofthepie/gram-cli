@@ -3,15 +3,15 @@ use async_trait::async_trait;
 use reqwest::{
     header,
     header::{HeaderMap, HeaderValue},
-    Client, Response,
+    Client,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use structopt::clap::{crate_name, crate_version};
 
 pub static GITHUB_BASE_URL: &str = "https://api.github.com";
 static GRAM_USER_AGENT: &str = concat!(crate_name!(), " ", crate_version!());
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Repository {
     pub description: Option<String>,
     pub allow_squash_merge: bool,
@@ -22,7 +22,9 @@ pub struct Repository {
 
 #[async_trait]
 pub trait GithubClient {
-    async fn get(&self, url: &str) -> Result<Response>;
+    async fn get<R>(&self, url: &str) -> Result<R>
+    where
+        R: DeserializeOwned;
 }
 
 pub struct Github<'a> {
@@ -57,7 +59,10 @@ impl<'a> Github<'a> {
 
 #[async_trait]
 impl GithubClient for Github<'_> {
-    async fn get(&self, url: &str) -> Result<Response> {
+    async fn get<T>(&self, url: &str) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
         let response = self
             .client
             .get(&format!("{}{}", self.base_url, url))
@@ -71,7 +76,10 @@ impl GithubClient for Github<'_> {
                 );
                 Err(anyhow!("{}", msg))
             }
-            _ => response.error_for_status().map_err(|e| anyhow!("{}", e)),
+            _ => {
+                let r = response.error_for_status().map_err(|e| anyhow!("{}", e))?;
+                Ok(r.json::<T>().await?)
+            }
         }
     }
 }
@@ -98,7 +106,7 @@ mod test {
         let github = Github::new("token".to_owned(), &url);
 
         // act
-        let response = github.get("/repos/owner/repo").await;
+        let response = github.get::<Repository>("/repos/owner/repo").await;
 
         // assert
         assert!(

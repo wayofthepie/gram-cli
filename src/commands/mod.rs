@@ -65,8 +65,7 @@ mod test {
     use crate::github::GithubClient;
     use anyhow::Result;
     use async_trait::async_trait;
-    use http::response;
-    use reqwest::Response;
+    use serde::de::DeserializeOwned;
     use std::clone::Clone;
     use std::path::{Path, PathBuf};
     use tokio;
@@ -84,15 +83,16 @@ mod test {
 
     #[derive(Default)]
     struct FakeGithubRepo {
-        repo: &'static str,
+        body: &'static str,
     }
 
     #[async_trait]
     impl GithubClient for FakeGithubRepo {
-        async fn get(&self, _: &str) -> Result<Response> {
-            let builder = response::Builder::new();
-            let r = builder.body(self.repo)?;
-            Ok(r.into())
+        async fn get<T>(&self, _: &str) -> Result<T>
+        where
+            T: DeserializeOwned,
+        {
+            Ok(serde_json::from_str(self.body)?)
         }
     }
 
@@ -118,7 +118,7 @@ mod test {
     async fn handle_it_should_error_if_settings_toml_has_a_value_but_the_repo_does_not() {
         // arrange
         let mut github = FakeGithubRepo::default();
-        github.repo = r#"
+        github.body = r#"
             { 
                 "description": null,
                 "allow_merge_commit": true,
@@ -151,7 +151,7 @@ mod test {
     async fn handle_it_should_error_if_settings_toml_and_repo_have_different_description() {
         // arrange
         let mut github = FakeGithubRepo::default();
-        github.repo = r#"
+        github.body = r#"
             { 
                 "description": "something else",
                 "allow_merge_commit": true,
