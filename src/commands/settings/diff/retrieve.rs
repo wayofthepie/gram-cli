@@ -35,10 +35,10 @@ where
             .into_iter()
             .map(|branch| ProtectedBranch { name: branch.name })
             .collect::<Vec<ProtectedBranch>>();
-        let protected = if protected.len() > 0 {
-            Some(protected)
-        } else {
+        let protected = if protected.is_empty() {
             None
+        } else {
+            Some(protected)
         };
         Ok(GramSettings {
             description: repository.description,
