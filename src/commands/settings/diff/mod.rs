@@ -1,6 +1,7 @@
+mod retrieve;
 use super::{GramSettings, Options};
 use crate::commands::FileReader;
-use crate::github::{GithubClient, Repository};
+use crate::github::{GithubClient};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -35,6 +36,7 @@ impl Diff {
         G: GithubClient,
     {
         let configured_settings = reader.read_settings(&self.settings_file)?;
+        println!("{:#?}", configured_settings);
         let actual_settings = self.get_actual_settings(&github).await?;
         let mut diffs = Diff::diff(
             DiffableSettings(&configured_settings),
@@ -55,9 +57,7 @@ impl Diff {
     }
 
     async fn get_actual_settings<G: GithubClient>(self, github: &G) -> Result<GramSettings> {
-        let repo = github
-            .get::<Repository>(&format!("/repos/{}/{}", &self.owner, &self.repo))
-            .await?;
+        let repo = github.repository(&self.owner, &self.repo).await?;
         let settings = GramSettings {
             description: repo.description,
             options: Some(Options {
@@ -147,51 +147,60 @@ mod test {
     use crate::github::Repository;
     use anyhow::anyhow;
     use async_trait::async_trait;
-    use serde::{de::DeserializeOwned, Serialize};
+    
     use std::clone::Clone;
-    use std::io::ErrorKind;
+    
     use std::path::{Path, PathBuf};
 
-    struct FakeGithub<'a, R> {
-        error: Option<String>,
-        result: &'a R,
+    struct SucceedingClient {
+        repo: Repository,
+    }
+
+    struct FailingClient {
+        err: String,
     }
 
     #[async_trait]
-    impl<'a, R> GithubClient for FakeGithub<'a, R>
-    where
-        R: Clone + Serialize + Sync,
-    {
-        async fn get<T>(&self, _: &str) -> anyhow::Result<T>
-        where
-            T: DeserializeOwned,
-        {
-            if self.error.is_some() {
-                Err(anyhow!(self.error.clone().unwrap()))
-            } else {
-                // TODO: figure out a better way of faking this generic function ...
-                let json = serde_json::to_string(&self.result.clone()).unwrap();
-                Ok(serde_json::from_str::<T>(&json)?)
-            }
+    impl GithubClient for SucceedingClient {
+        async fn repository(&self, _: &str, _: &str) -> anyhow::Result<Repository> {
+            let json = serde_json::to_string(&self.repo).unwrap();
+            Ok(serde_json::from_str::<Repository>(&json)?)
         }
     }
 
-    struct FakeFileReader<'a> {
-        error: bool,
+    #[async_trait]
+    impl GithubClient for FailingClient {
+        async fn repository(&self, _: &str, _: &str) -> anyhow::Result<Repository> {
+            Err(anyhow!(self.err.clone()))
+        }
+    }
+
+    struct SucceedingFileReader<'a> {
         settings: &'a GramSettings,
     }
 
-    impl<'a> FileReader for FakeFileReader<'a> {
+    struct FailingFileReader {}
+
+    impl<'a> FileReader for SucceedingFileReader<'a> {
         fn read_to_string<P: AsRef<Path>>(&self, _: P) -> Result<String, std::io::Error> {
-            if self.error {
-                Err(std::io::Error::new(ErrorKind::Other, ""))
-            } else {
-                Ok("".to_owned())
-            }
+            unimplemented!()
         }
 
         fn read_settings(&self, _: &PathBuf) -> anyhow::Result<GramSettings> {
             Ok(self.settings.clone())
+        }
+    }
+
+    impl<'a> FileReader for FailingFileReader {
+        fn read_to_string<P: AsRef<Path>>(
+            &self,
+            _path: P,
+        ) -> anyhow::Result<String, std::io::Error> {
+            unimplemented!()
+        }
+
+        fn read_settings(&self, _settings_location: &PathBuf) -> anyhow::Result<GramSettings> {
+            Err(anyhow!(""))
         }
     }
 
@@ -218,13 +227,6 @@ mod test {
         (settings, repo)
     }
 
-    fn passing_reader<'a>(settings: &'a GramSettings) -> FakeFileReader<'a> {
-        FakeFileReader {
-            error: false,
-            settings,
-        }
-    }
-
     fn default_diff() -> Diff {
         Diff {
             owner: "".to_owned(),
@@ -237,12 +239,17 @@ mod test {
         // arrange
         let (settings, repo) = opposing_settings_and_repo();
         let diff = default_diff();
-        let github = FakeGithub::<Repository> {
-            error: None,
-            result: &repo,
-        };
+        let github = SucceedingClient { repo: repo.clone() };
+
         // act
-        let result = diff.handle(passing_reader(&settings), github).await;
+        let result = diff
+            .handle(
+                SucceedingFileReader {
+                    settings: &settings,
+                },
+                github,
+            )
+            .await;
 
         // assert
         assert!(result.is_err());
@@ -291,16 +298,12 @@ mod test {
         // arrange
         let mut settings = GramSettings::default();
         settings.description = Some("blah".to_owned());
-        let reader = FakeFileReader {
-            error: false,
+        let reader = SucceedingFileReader {
             settings: &settings,
         };
         let mut repo = Repository::default();
         repo.description = Some("different".to_owned());
-        let github = FakeGithub::<Repository> {
-            error: None,
-            result: &repo,
-        };
+        let github = SucceedingClient { repo };
         let diff = Diff {
             owner: "".to_owned(),
             repo: "".to_owned(),
@@ -321,15 +324,12 @@ mod test {
     #[tokio::test]
     async fn diff_should_error_if_get_for_repo_fails() {
         // arrange
-        let reader = FakeFileReader {
-            error: false,
+        let reader = SucceedingFileReader {
             settings: &GramSettings::default(),
         };
-        let github = FakeGithub::<String> {
-            error: None,
-            result: &"error".to_owned(),
+        let github = FailingClient {
+            err: "error".to_owned(),
         };
-
         let diff = Diff {
             owner: "".to_owned(),
             repo: "".to_owned(),
@@ -346,25 +346,21 @@ mod test {
     #[tokio::test]
     async fn diff_should_error_if_reading_settings_file_fails() {
         // arrange
-        let failing_reader = FakeFileReader {
-            error: true,
-            settings: &GramSettings::default(),
-        };
+        let failing_reader = FailingFileReader {};
         let diff = Diff {
             owner: "".to_owned(),
             repo: "".to_owned(),
             settings_file: PathBuf::new(),
         };
-
-        let github = FakeGithub::<String> {
-            error: Some("".to_owned()),
-            result: &"".to_owned(),
+        let github = SucceedingClient {
+            repo: Repository::default(),
         };
 
         // act
         let result = diff.handle(failing_reader, github).await;
 
         // assert
+        println!("{:#?}", result);
         assert!(result.is_err());
     }
 }

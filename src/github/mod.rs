@@ -20,13 +20,6 @@ pub struct Repository {
     pub delete_branch_on_merge: bool,
 }
 
-#[async_trait]
-pub trait GithubClient {
-    async fn get<R>(&self, url: &str) -> Result<R>
-    where
-        R: DeserializeOwned;
-}
-
 pub struct Github<'a> {
     base_url: &'a str,
     client: Client,
@@ -55,10 +48,7 @@ impl<'a> Github<'a> {
         );
         headers
     }
-}
 
-#[async_trait]
-impl GithubClient for Github<'_> {
     async fn get<T>(&self, url: &str) -> Result<T>
     where
         T: DeserializeOwned,
@@ -84,9 +74,22 @@ impl GithubClient for Github<'_> {
     }
 }
 
+#[async_trait]
+pub trait GithubClient {
+    async fn repository(&self, owner: &str, name: &str) -> Result<Repository>;
+}
+
+#[async_trait]
+impl GithubClient for Github<'_> {
+    async fn repository(&self, owner: &str, name: &str) -> Result<Repository> {
+        self.get::<Repository>(&format!("/repos/{}/{}", owner, name))
+            .await
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::{Github, GithubClient, Repository};
+    use super::{Github, Repository};
     use mockito::mock;
     use serde::Serialize;
     use serde_json;
