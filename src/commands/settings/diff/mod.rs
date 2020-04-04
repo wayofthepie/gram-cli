@@ -236,6 +236,18 @@ mod test {
         }
     }
 
+    fn branches_err_format(branches: Vec<ProtectedBranch>) -> String {
+        branches
+            .iter()
+            .fold(String::new(), |mut acc, branch| {
+                acc.push_str(&branch.name);
+                acc.push_str(" ");
+                acc
+            })
+            .trim()
+            .to_owned()
+    }
+
     #[tokio::test]
     async fn diff_error_for_differing_settings_should_contain_a_line_per_error_when_values_differ()
     {
@@ -291,8 +303,8 @@ mod test {
         );
         let protected_branch_master_error = format!(
             "[protected]: expected [{}] got [{}]",
-            local_settings.protected.unwrap()[0].name,
-            repo_settings.protected.unwrap()[0].name
+            branches_err_format(local_settings.protected.unwrap()),
+            branches_err_format(repo_settings.protected.unwrap())
         );
         assert_eq!(description_err, diffs[0]);
         assert_eq!(allow_merge_commit_error, diffs[1]);
