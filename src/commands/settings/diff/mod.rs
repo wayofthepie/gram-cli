@@ -1,8 +1,8 @@
-mod retrieve;
+pub mod retrieve;
 use super::{GramSettings, Options};
 use crate::commands::FileReader;
-use crate::github::{GithubClient};
 use anyhow::{anyhow, Result};
+use retrieve::Retrieve;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -30,14 +30,14 @@ pub struct Diff {
 struct DiffableSettings<'a>(&'a GramSettings);
 
 impl Diff {
-    pub async fn handle<F, G>(self, reader: F, github: G) -> Result<()>
+    pub async fn handle<F, R>(self, reader: F, retriever: R) -> Result<()>
     where
         F: FileReader,
-        G: GithubClient,
+        R: Retrieve,
     {
         let configured_settings = reader.read_settings(&self.settings_file)?;
         println!("{:#?}", configured_settings);
-        let actual_settings = self.get_actual_settings(&github).await?;
+        let actual_settings = retriever.retrieve(&self.owner, &self.repo).await?;
         let mut diffs = Diff::diff(
             DiffableSettings(&configured_settings),
             DiffableSettings(&actual_settings),
@@ -54,20 +54,6 @@ impl Diff {
                 Err(anyhow!("Actual settings differ from expected!\n{}", errors))
             }
         }
-    }
-
-    async fn get_actual_settings<G: GithubClient>(self, github: &G) -> Result<GramSettings> {
-        let repo = github.repository(&self.owner, &self.repo).await?;
-        let settings = GramSettings {
-            description: repo.description,
-            options: Some(Options {
-                allow_squash_merge: Some(repo.allow_squash_merge),
-                allow_merge_commit: Some(repo.allow_merge_commit),
-                allow_rebase_merge: Some(repo.allow_rebase_merge),
-                delete_branch_on_merge: Some(repo.delete_branch_on_merge),
-            }),
-        };
-        Ok(settings)
     }
 
     /// Get the diff between two [GramSettings](commands.struct.GramSettings.html).
@@ -115,6 +101,7 @@ impl<'a> From<DiffableSettings<'a>> for HashMap<&'a str, String> {
         let GramSettings {
             description,
             options,
+            protected: _,
         } = settings.0;
         let mut hm = Self::new();
         description
@@ -142,38 +129,14 @@ impl<'a> From<DiffableSettings<'a>> for HashMap<&'a str, String> {
 
 #[cfg(test)]
 mod test {
-    use super::{Diff, FileReader, GithubClient};
-    use super::{GramSettings, Options};
-    use crate::github::Repository;
+    use super::{retrieve::Retrieve, Diff, FileReader};
+    use crate::commands::settings::{GramSettings, Options, ProtectedBranch};
     use anyhow::anyhow;
     use async_trait::async_trait;
-    
+
     use std::clone::Clone;
-    
+
     use std::path::{Path, PathBuf};
-
-    struct SucceedingClient {
-        repo: Repository,
-    }
-
-    struct FailingClient {
-        err: String,
-    }
-
-    #[async_trait]
-    impl GithubClient for SucceedingClient {
-        async fn repository(&self, _: &str, _: &str) -> anyhow::Result<Repository> {
-            let json = serde_json::to_string(&self.repo).unwrap();
-            Ok(serde_json::from_str::<Repository>(&json)?)
-        }
-    }
-
-    #[async_trait]
-    impl GithubClient for FailingClient {
-        async fn repository(&self, _: &str, _: &str) -> anyhow::Result<Repository> {
-            Err(anyhow!(self.err.clone()))
-        }
-    }
 
     struct SucceedingFileReader<'a> {
         settings: &'a GramSettings,
@@ -204,54 +167,59 @@ mod test {
         }
     }
 
-    static SETTINGS_DESCRIPTION: &'static str = "description";
-    static REPO_DESCRIPTION: &'static str = "different";
-
-    fn opposing_settings_and_repo() -> (GramSettings, Repository) {
-        let settings = GramSettings {
-            description: Some(SETTINGS_DESCRIPTION.to_owned()),
-            options: Some(Options {
-                delete_branch_on_merge: Some(true),
-                allow_rebase_merge: Some(true),
-                allow_squash_merge: Some(true),
-                allow_merge_commit: Some(false),
-            }),
-        };
-        let repo = Repository {
-            description: Some(REPO_DESCRIPTION.to_owned()),
-            allow_merge_commit: true,
-            allow_squash_merge: false,
-            allow_rebase_merge: false,
-            delete_branch_on_merge: false,
-        };
-        (settings, repo)
+    struct FakeRetriever {
+        settings: Option<GramSettings>,
     }
 
-    fn default_diff() -> Diff {
-        Diff {
-            owner: "".to_owned(),
-            repo: "".to_owned(),
-            settings_file: PathBuf::new().to_owned(),
+    #[async_trait]
+    impl Retrieve for FakeRetriever {
+        async fn retrieve(&self, _owner: &str, _repo: &str) -> anyhow::Result<GramSettings> {
+            match &self.settings {
+                Some(settings) => Ok(settings.clone()),
+                None => Err(anyhow!("")),
+            }
         }
     }
 
-    async fn setup_diff_error_test() -> (GramSettings, Repository, Vec<String>) {
-        // arrange
-        let (settings, repo) = opposing_settings_and_repo();
-        let diff = default_diff();
-        let github = SucceedingClient { repo: repo.clone() };
+    #[tokio::test]
+    async fn diff_error_for_differing_settings_should_contain_a_line_per_error_when_values_differ()
+    {
+        let local_settings = GramSettings {
+            description: Some("a".to_owned()),
+            options: Some(Options {
+                allow_squash_merge: Some(true),
+                allow_merge_commit: Some(true),
+                allow_rebase_merge: Some(true),
+                delete_branch_on_merge: Some(true),
+            }),
+            protected: Some(vec![ProtectedBranch {
+                name: "a".to_owned(),
+            }]),
+        };
+        let repo_settings = GramSettings {
+            description: Some("b".to_owned()),
+            options: Some(Options {
+                allow_squash_merge: Some(false),
+                allow_merge_commit: Some(false),
+                allow_rebase_merge: Some(false),
+                delete_branch_on_merge: Some(false),
+            }),
+            protected: None,
+        };
+        let diff = Diff {
+            owner: "".to_owned(),
+            repo: "".to_owned(),
+            settings_file: PathBuf::new(),
+        };
 
-        // act
-        let result = diff
-            .handle(
-                SucceedingFileReader {
-                    settings: &settings,
-                },
-                github,
-            )
-            .await;
+        let reader = SucceedingFileReader {
+            settings: &local_settings.clone(),
+        };
+        let retriever = FakeRetriever {
+            settings: Some(repo_settings.clone()),
+        };
 
-        // assert
+        let result = diff.handle(reader, retriever).await;
         assert!(result.is_err());
         let err = format!("{}", result.err().unwrap());
         let err = err.trim();
@@ -260,107 +228,31 @@ mod test {
             .skip(1)
             .map(|s| s.to_owned())
             .collect::<Vec<String>>();
-        (settings, repo, diffs)
-    }
 
-    #[tokio::test]
-    async fn diff_error_for_differing_settings_should_contain_a_line_per_failed_setting() {
-        let (settings, repo, diffs) = setup_diff_error_test().await;
-        let options = settings.options.unwrap();
         let description_err = format!(
             "[description]: expected [{}] got [{}]",
-            SETTINGS_DESCRIPTION, REPO_DESCRIPTION
+            local_settings.description.unwrap(),
+            repo_settings.description.unwrap()
         );
         let allow_merge_commit_error = format!(
             "[options.allow-merge-commit]: expected [{}] got [{}]",
-            options.allow_merge_commit.clone().unwrap(),
-            repo.allow_merge_commit
+            local_settings.options.unwrap().allow_merge_commit.unwrap(),
+            repo_settings.options.unwrap().allow_merge_commit.unwrap()
         );
         let allow_rebase_merge_err = format!(
             "[options.allow-rebase-merge]: expected [{}] got [{}]",
-            options.allow_rebase_merge.clone().unwrap(),
-            repo.allow_rebase_merge
+            local_settings.options.unwrap().allow_rebase_merge.unwrap(),
+            repo_settings.options.unwrap().allow_rebase_merge.unwrap()
         );
         let allow_squash_merge_error = format!(
             "[options.allow-squash-merge]: expected [{}] got [{}]",
-            options.allow_squash_merge.clone().unwrap(),
-            repo.allow_squash_merge
+            local_settings.options.unwrap().allow_squash_merge.unwrap(),
+            repo_settings.options.unwrap().allow_squash_merge.unwrap(),
         );
 
         assert_eq!(description_err, diffs[0]);
         assert_eq!(allow_merge_commit_error, diffs[1]);
         assert_eq!(allow_rebase_merge_err, diffs[2]);
         assert_eq!(allow_squash_merge_error, diffs[3]);
-    }
-
-    #[tokio::test]
-    async fn diff_should_error_with_differences_if_repo_and_settings_differ() {
-        // arrange
-        let mut settings = GramSettings::default();
-        settings.description = Some("blah".to_owned());
-        let reader = SucceedingFileReader {
-            settings: &settings,
-        };
-        let mut repo = Repository::default();
-        repo.description = Some("different".to_owned());
-        let github = SucceedingClient { repo };
-        let diff = Diff {
-            owner: "".to_owned(),
-            repo: "".to_owned(),
-            settings_file: PathBuf::new().to_owned(),
-        };
-
-        // act
-        let result = diff.handle(reader, github).await;
-
-        // assert
-        println!("{:#?}", result);
-        assert!(result.is_err());
-        assert!(
-            format!("{}", result.err().unwrap()).contains("Actual settings differ from expected!")
-        );
-    }
-
-    #[tokio::test]
-    async fn diff_should_error_if_get_for_repo_fails() {
-        // arrange
-        let reader = SucceedingFileReader {
-            settings: &GramSettings::default(),
-        };
-        let github = FailingClient {
-            err: "error".to_owned(),
-        };
-        let diff = Diff {
-            owner: "".to_owned(),
-            repo: "".to_owned(),
-            settings_file: PathBuf::new().to_owned(),
-        };
-
-        // act
-        let result = diff.handle(reader, github).await;
-
-        // assert
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn diff_should_error_if_reading_settings_file_fails() {
-        // arrange
-        let failing_reader = FailingFileReader {};
-        let diff = Diff {
-            owner: "".to_owned(),
-            repo: "".to_owned(),
-            settings_file: PathBuf::new(),
-        };
-        let github = SucceedingClient {
-            repo: Repository::default(),
-        };
-
-        // act
-        let result = diff.handle(failing_reader, github).await;
-
-        // assert
-        println!("{:#?}", result);
-        assert!(result.is_err());
     }
 }

@@ -20,6 +20,11 @@ pub struct Repository {
     pub delete_branch_on_merge: bool,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Branch {
+    pub name: String,
+}
+
 pub struct Github<'a> {
     base_url: &'a str,
     client: Client,
@@ -77,6 +82,7 @@ impl<'a> Github<'a> {
 #[async_trait]
 pub trait GithubClient {
     async fn repository(&self, owner: &str, name: &str) -> Result<Repository>;
+    async fn protected_branches(&self, owner: &str, name: &str) -> Result<Vec<Branch>>;
 }
 
 #[async_trait]
@@ -84,6 +90,13 @@ impl GithubClient for Github<'_> {
     async fn repository(&self, owner: &str, name: &str) -> Result<Repository> {
         self.get::<Repository>(&format!("/repos/{}/{}", owner, name))
             .await
+    }
+    async fn protected_branches(&self, owner: &str, name: &str) -> Result<Vec<Branch>> {
+        self.get::<Vec<Branch>>(&format!(
+            "/repos/{}/{}/branches?protected=true",
+            owner, name
+        ))
+        .await
     }
 }
 

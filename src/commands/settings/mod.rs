@@ -1,4 +1,4 @@
-mod diff;
+pub mod diff;
 use anyhow::Result;
 pub use diff::Diff;
 use serde::Deserialize;
@@ -20,6 +20,7 @@ pub enum SettingsCmd {
 pub struct GramSettings {
     pub description: Option<String>,
     pub options: Option<Options>,
+    pub protected: Option<Vec<ProtectedBranch>>,
 }
 
 /// Represents settings that appear under a repositories Settings -> Options section.
@@ -36,6 +37,11 @@ pub struct Options {
 }
 
 impl Copy for Options {}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct ProtectedBranch {
+    pub name: String,
+}
 
 pub struct SettingsReader;
 
@@ -60,4 +66,3 @@ impl FileReader for SettingsReader {
         fs::read_to_string(path)
     }
 }
-
