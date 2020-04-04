@@ -36,7 +36,6 @@ impl Diff {
         R: Retrieve,
     {
         let configured_settings = reader.read_settings(&self.settings_file)?;
-        println!("{:#?}", configured_settings);
         let actual_settings = retriever.retrieve(&self.owner, &self.repo).await?;
         let mut diffs = Diff::diff(
             DiffableSettings(&configured_settings),
@@ -90,6 +89,7 @@ static OPTIONS_ALLOW_SQUASH_MERGE_KEY: &str = "options.allow-squash-merge";
 static OPTIONS_ALLOW_MERGE_COMMIT_KEY: &str = "options.allow-merge-commit";
 static OPTIONS_ALLOW_REBASE_MERGE_KEY: &str = "options.allow-rebase-merge";
 static OPTIONS_DELETE_BRANCH_ON_MERGE_KEY: &str = "options.delete-branch-on-merge";
+static PROTECTED: &str = "protected";
 
 // TODO: it would be nicer to use a macro/proc-macro to generate this
 // instance. Then the keys can be taken directly from the field names.
@@ -101,7 +101,7 @@ impl<'a> From<DiffableSettings<'a>> for HashMap<&'a str, String> {
         let GramSettings {
             description,
             options,
-            protected: _,
+            protected,
         } = settings.0;
         let mut hm = Self::new();
         description
@@ -122,6 +122,18 @@ impl<'a> From<DiffableSettings<'a>> for HashMap<&'a str, String> {
                 .map(|allow| hm.insert(OPTIONS_ALLOW_REBASE_MERGE_KEY, allow.to_string()));
             delete_branch_on_merge
                 .map(|delete| hm.insert(OPTIONS_DELETE_BRANCH_ON_MERGE_KEY, delete.to_string()));
+        }
+        if let Some(branches) = protected {
+            let branches_str = branches
+                .iter()
+                .fold(String::new(), |mut acc, branch| {
+                    acc.push_str(&branch.name);
+                    acc.push_str(" ");
+                    acc
+                })
+                .trim()
+                .to_owned();
+            hm.insert(PROTECTED, branches_str);
         }
         hm
     }
@@ -181,10 +193,8 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    async fn diff_error_for_differing_settings_should_contain_a_line_per_error_when_values_differ()
-    {
-        let local_settings = GramSettings {
+    fn local_settings() -> GramSettings {
+        GramSettings {
             description: Some("a".to_owned()),
             options: Some(Options {
                 allow_squash_merge: Some(true),
@@ -192,11 +202,19 @@ mod test {
                 allow_rebase_merge: Some(true),
                 delete_branch_on_merge: Some(true),
             }),
-            protected: Some(vec![ProtectedBranch {
-                name: "a".to_owned(),
-            }]),
-        };
-        let repo_settings = GramSettings {
+            protected: Some(vec![
+                ProtectedBranch {
+                    name: "a".to_owned(),
+                },
+                ProtectedBranch {
+                    name: "b".to_owned(),
+                },
+            ]),
+        }
+    }
+
+    fn repo_settings() -> GramSettings {
+        GramSettings {
             description: Some("b".to_owned()),
             options: Some(Options {
                 allow_squash_merge: Some(false),
@@ -204,13 +222,26 @@ mod test {
                 allow_rebase_merge: Some(false),
                 delete_branch_on_merge: Some(false),
             }),
-            protected: None,
-        };
-        let diff = Diff {
+            protected: Some(vec![ProtectedBranch {
+                name: "b".to_owned(),
+            }]),
+        }
+    }
+
+    fn default_diff() -> Diff {
+        Diff {
             owner: "".to_owned(),
             repo: "".to_owned(),
             settings_file: PathBuf::new(),
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn diff_error_for_differing_settings_should_contain_a_line_per_error_when_values_differ()
+    {
+        let local_settings = local_settings();
+        let repo_settings = repo_settings();
+        let diff = default_diff();
 
         let reader = SucceedingFileReader {
             settings: &local_settings.clone(),
@@ -219,11 +250,13 @@ mod test {
             settings: Some(repo_settings.clone()),
         };
 
+        // act
         let result = diff.handle(reader, retriever).await;
+
+        // assert
         assert!(result.is_err());
-        let err = format!("{}", result.err().unwrap());
-        let err = err.trim();
-        let diffs = err
+        let diffs = format!("{}", result.err().unwrap())
+            .trim()
             .split("\n")
             .skip(1)
             .map(|s| s.to_owned())
@@ -234,25 +267,38 @@ mod test {
             local_settings.description.unwrap(),
             repo_settings.description.unwrap()
         );
+        let local_options = local_settings.options.unwrap();
+        let repo_options = repo_settings.options.unwrap();
         let allow_merge_commit_error = format!(
             "[options.allow-merge-commit]: expected [{}] got [{}]",
-            local_settings.options.unwrap().allow_merge_commit.unwrap(),
-            repo_settings.options.unwrap().allow_merge_commit.unwrap()
+            local_options.allow_merge_commit.unwrap(),
+            repo_options.allow_merge_commit.unwrap()
         );
         let allow_rebase_merge_err = format!(
             "[options.allow-rebase-merge]: expected [{}] got [{}]",
-            local_settings.options.unwrap().allow_rebase_merge.unwrap(),
-            repo_settings.options.unwrap().allow_rebase_merge.unwrap()
+            local_options.allow_rebase_merge.unwrap(),
+            repo_options.allow_rebase_merge.unwrap()
         );
         let allow_squash_merge_error = format!(
             "[options.allow-squash-merge]: expected [{}] got [{}]",
-            local_settings.options.unwrap().allow_squash_merge.unwrap(),
-            repo_settings.options.unwrap().allow_squash_merge.unwrap(),
+            local_options.allow_squash_merge.unwrap(),
+            repo_options.allow_squash_merge.unwrap(),
         );
-
+        let delete_branch_on_merge_error = format!(
+            "[options.delete-branch-on-merge]: expected [{}] got [{}]",
+            local_options.delete_branch_on_merge.unwrap(),
+            repo_options.delete_branch_on_merge.unwrap()
+        );
+        let protected_branch_master_error = format!(
+            "[protected]: expected [{}] got [{}]",
+            local_settings.protected.unwrap()[0].name,
+            repo_settings.protected.unwrap()[0].name
+        );
         assert_eq!(description_err, diffs[0]);
         assert_eq!(allow_merge_commit_error, diffs[1]);
         assert_eq!(allow_rebase_merge_err, diffs[2]);
         assert_eq!(allow_squash_merge_error, diffs[3]);
+        assert_eq!(delete_branch_on_merge_error, diffs[4]);
+        assert_eq!(protected_branch_master_error, diffs[5]);
     }
 }
