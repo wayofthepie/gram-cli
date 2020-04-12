@@ -58,7 +58,7 @@ mod test {
     use super::{Retrieve, RetrieveSettings};
     use crate::{
         commands::settings::GramSettings,
-        github::{Branch, GithubClient, Repository},
+        github::{Branch, GithubClient, Protection, Repository, RequiredStatusChecks},
     };
     use anyhow::{anyhow, Result};
     use async_trait::async_trait;
@@ -96,7 +96,12 @@ mod test {
 
     fn default_protected_branches() -> Vec<Branch> {
         let mut branch = Branch::default();
+        let mut protection = Protection::default();
+        let mut status_checks = RequiredStatusChecks::default();
+        status_checks.contexts = vec!["ci".to_owned()];
+        protection.required_status_checks = status_checks;
         branch.name = "master".to_owned();
+        branch.protection = protection;
         vec![branch]
     }
 
@@ -138,6 +143,11 @@ mod test {
         assert!(settings.protected.is_some());
         let protected_branches = settings.protected.unwrap();
         assert_eq!(branches[0].name, protected_branches[0].name);
+        assert!(branches[0]
+            .protection
+            .required_status_checks
+            .contexts
+            .contains(&"ci".to_owned()))
     }
 
     #[tokio::test]
