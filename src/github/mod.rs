@@ -23,6 +23,18 @@ pub struct Repository {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Branch {
     pub name: String,
+    pub protection: Protection,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Protection {
+    pub enabled: bool,
+    pub required_status_checks: RequiredStatusChecks,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct RequiredStatusChecks {
+    pub contexts: Vec<String>,
 }
 
 pub struct Github<'a> {
@@ -102,14 +114,10 @@ impl GithubClient for Github<'_> {
 
 #[cfg(test)]
 mod test {
-    use super::{Github, Repository};
+    use super::{Branch, Github, Repository};
     use mockito::mock;
-    use serde::Serialize;
     use serde_json;
-
-    fn to_json_value<T: Serialize>(string: &T) -> String {
-        serde_json::to_string(string).unwrap()
-    }
+    use serde_json::json;
 
     #[tokio::test]
     async fn get_should_error_with_message_if_call_returns_401() {
@@ -144,25 +152,16 @@ mod test {
         let allow_squash_merge = false;
         let allow_rebase_merge = true;
         let delete_branch_on_merge = true;
-        let json = format!(
-            r#"
-            {{
-                "description": {},
-                "allow_merge_commit": {},
-                "allow_squash_merge": {},
-                "allow_rebase_merge": {},
-                "delete_branch_on_merge": {}
-            }}
-        "#,
-            to_json_value(&description),
-            to_json_value(&allow_merge_commit),
-            to_json_value(&allow_squash_merge),
-            to_json_value(&allow_rebase_merge),
-            to_json_value(&delete_branch_on_merge),
-        );
+        let json = json!({
+           "description": &description,
+           "allow_merge_commit": &allow_merge_commit,
+           "allow_squash_merge": &allow_squash_merge,
+           "allow_rebase_merge": &allow_rebase_merge,
+           "delete_branch_on_merge": &delete_branch_on_merge
+        });
 
         // act
-        let repo = serde_json::from_str::<Repository>(&json).unwrap();
+        let repo = serde_json::from_str::<Repository>(&json.to_string()).unwrap();
 
         // assert
         assert_eq!(description, repo.description);
@@ -170,5 +169,34 @@ mod test {
         assert_eq!(allow_squash_merge, repo.allow_squash_merge);
         assert_eq!(allow_rebase_merge, repo.allow_rebase_merge);
         assert_eq!(delete_branch_on_merge, repo.delete_branch_on_merge);
+    }
+
+    #[test]
+    fn branch_should_deserialize_correctly() {
+        // arrange
+        let branch_name = "master".to_owned();
+        let json = json!([
+            {
+                "name": &branch_name,
+                "protection": {
+                    "enabled": true,
+                    "required_status_checks": {
+                        "contexts": ["master"]
+                    }
+                }
+            }
+        ]);
+
+        // act
+        let branch = dbg!(serde_json::from_str::<Vec<Branch>>(&json.to_string())).unwrap();
+
+        // assert
+        assert_eq!(branch_name, branch[0].name);
+        assert_eq!(true, branch[0].protection.enabled);
+        assert!(branch[0]
+            .protection
+            .required_status_checks
+            .contexts
+            .contains(&"master".to_string()));
     }
 }

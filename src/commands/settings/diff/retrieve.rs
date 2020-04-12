@@ -95,9 +95,9 @@ mod test {
     }
 
     fn default_protected_branches() -> Vec<Branch> {
-        vec![Branch {
-            name: "master".to_owned(),
-        }]
+        let mut branch = Branch::default();
+        branch.name = "master".to_owned();
+        vec![branch]
     }
 
     async fn actual_settings(repo: Repository, branches: Vec<Branch>) -> Result<GramSettings> {
